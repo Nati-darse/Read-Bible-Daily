@@ -1,17 +1,20 @@
-# bot.py - Main Telegram bot
+# bot.py - Main Telegram bot for Daily Bible Reader
 import os
 import logging
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, filters, 
-    ContextTypes, ConversationHandler
+    ContextTypes, ConversationHandler, CallbackQueryHandler
 )
 
 # Import our modules
-from config import READING_PLANS, BIBLE_TRANSLATIONS
+from config import READING_PLANS, BIBLE_TRANSLATIONS, LANGUAGES, MESSAGES, BOT_SETTINGS
 from database import db
 from reading_plans import reading_plans
+from bible_api import bible_api
+from menu import Menu
 
 # Load environment variables
 load_dotenv()
@@ -24,60 +27,42 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Conversation states
-CHOOSING_PLAN, CHOOSING_TRANSLATION = range(2)
-
-# Bible API function
-def get_bible_text(book, chapter, translation='ESV'):
-    """Fetch Bible text from free API"""
-    import requests
-    
-    # Format book name for API (replace spaces with +)
-    book_formatted = book.replace(' ', '+')
-    
-    try:
-        url = f"https://bible-api.com/{book_formatted}+{chapter}?translation={translation}"
-        response = requests.get(url)
-        data = response.json()
-        
-        if 'error' in data:
-            return f"Sorry, couldn't fetch {book} {chapter}. Please try again later."
-        
-        verses = data.get('verses', [])
-        text = f"📖 {book} Chapter {chapter} ({translation})\n\n"
-        
-        for verse in verses:
-            text += f"{verse['verse']}. {verse['text']}\n"
-        
-        return text[:4000]  # Telegram message limit
-        
-    except Exception as e:
-        logger.error(f"Error fetching Bible text: {e}")
-        return f"❌ Error fetching {book} {chapter}. Please try again later."
+CHOOSING_LANGUAGE, CHOOSING_PLAN, CHOOSING_TRANSLATION = range(3)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send welcome message and show plan options"""
+    """Entry point: Check if user exists or start onboarding"""
     user = update.effective_user
     user_id = user.id
     
-    # Check if user already exists
     existing_user = db.get_user(user_id)
     
     if existing_user:
-        # User already registered, show today's reading
-        await show_todays_reading(update, context, user_id)
+        lang = existing_user.get('language', 'en')
+        welcome_back = "👋 " + ("እንኳን በደህና መጡ!" if lang == 'am' else "Welcome back!")
+        await update.message.reply_text(welcome_back, reply_markup=Menu.get_main_menu(lang))
         return ConversationHandler.END
     
-    # New user - show plan options
-    keyboard = [
-        ["📖 Bible in One Year", "🙏 Psalms in One Month"],
-        ["✝️ New Testament in 6 Months"]
-    ]
-    reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True)
+    # New user: Start with language selection
+    keyboard = [["English", "አማርኛ (Amharic)"]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
     
     await update.message.reply_text(
-        f"👋 Welcome {user.first_name} to Daily Bible Reader!\n\n"
-        "📚 Choose your reading plan:",
+        MESSAGES['choose_language']['en'],
         reply_markup=reply_markup
+    )
+    
+    return CHOOSING_LANGUAGE
+
+async def language_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle language selection"""
+    choice = update.message.text
+    lang = 'am' if 'አማርኛ' in choice else 'en'
+    context.user_data['language'] = lang
+    
+    # Show plan options in selected language
+    await update.message.reply_text(
+        MESSAGES['welcome'][lang].format(name=update.effective_user.first_name),
+        reply_markup=Menu.get_plan_menu(lang)
     )
     
     return CHOOSING_PLAN
@@ -85,35 +70,39 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def plan_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle plan selection"""
     plan_choice = update.message.text
+    lang = context.user_data.get('language', 'en')
     
-    # Map display names to plan keys
-    plan_mapping = {
-        "📖 Bible in One Year": "bible_in_one_year",
-        "🙏 Psalms in One Month": "psalms_in_one_month",
-        "✝️ New Testament in 6 Months": "new_testament_in_six_months"
-    }
-    
-    plan_key = plan_mapping.get(plan_choice, "bible_in_one_year")
+    # Map choice text back to plan key
+    plan_key = 'bible_in_one_year' # Default
+    for key, val in READING_PLANS.items():
+        if val['name'][lang] in plan_choice:
+            plan_key = key
+            break
+            
     context.user_data['plan'] = plan_key
     
     # Show translation options
-    keyboard = [["ESV", "KJV", "NIV"]]
-    reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True)
-    
     await update.message.reply_text(
-        "📖 Choose your preferred Bible translation:",
-        reply_markup=reply_markup
+        MESSAGES['choose_translation'][lang],
+        reply_markup=Menu.get_translation_menu(lang)
     )
     
     return CHOOSING_TRANSLATION
 
 async def translation_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle translation selection and complete registration"""
-    translation = update.message.text
-    user = update.effective_user
+    choice = update.message.text
+    translation = 'ESV' # Default
     
-    if translation not in ["ESV", "KJV", "NIV"]:
-        translation = "ESV"  # Default
+    if 'AMH' in choice or 'Amharic' in choice:
+        translation = 'AMH'
+    elif 'KJV' in choice:
+        translation = 'KJV'
+    elif 'NIV' in choice:
+        translation = 'NIV'
+        
+    lang = context.user_data.get('language', 'en')
+    user = update.effective_user
     
     # Save user to database
     db.add_user(
@@ -121,166 +110,213 @@ async def translation_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE)
         username=user.username,
         first_name=user.first_name,
         plan_name=context.user_data['plan'],
-        translation=translation
+        translation=translation,
+        language=lang
     )
+    
+    plan_name = READING_PLANS[context.user_data['plan']]['name'][lang]
+    trans_name = BIBLE_TRANSLATIONS.get(translation, translation)
     
     await update.message.reply_text(
-        f"✅ Registration complete!\n\n"
-        f"📚 Plan: {READING_PLANS[context.user_data['plan']]['name']}\n"
-        f"📖 Translation: {translation}\n\n"
-        f"Use /today to get today's reading\n"
-        f"Use /progress to see your progress\n"
-        f"Use /settings to change your plan",
-        reply_markup=ReplyKeyboardRemove()
+        MESSAGES['registration_complete'][lang].format(plan=plan_name, translation=trans_name),
+        reply_markup=Menu.get_main_menu(lang)
     )
-    
-    # Show today's reading
-    await show_todays_reading(update, context, user.id)
     
     return ConversationHandler.END
 
-async def show_todays_reading(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id=None):
-    """Show today's Bible reading"""
-    if user_id is None:
-        user_id = update.effective_user.id
-    
+async def handle_menu_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle main menu button clicks"""
+    text = update.message.text
+    user_id = update.effective_user.id
     user_data = db.get_user(user_id)
     
     if not user_data:
-        await update.message.reply_text("Please use /start to register first!")
+        await start(update, context)
         return
+
+    lang = user_data['language']
+    
+    # Check which button was clicked
+    if text in ["📖 TODAY'S READING", "📖 የዛሬው ንባብ"]:
+        await show_todays_reading(update, context, user_data)
+    elif text in ["👤 My Profile", "👤 የእኔ ፕሮፋይል"]:
+        await show_profile(update, context, user_data)
+    elif text in ["📊 My Progress", "📊 የእኔ ግስጋሴ"]:
+        await show_progress(update, context, user_data)
+    elif text in ["⚙️ Settings", "⚙️ ቅንብሮች"]:
+        await update.message.reply_text(
+            "⚙️ " + ("ቅንብሮች" if lang == 'am' else "Settings"),
+            reply_markup=Menu.get_settings_menu(lang)
+        )
+    elif text in ["🔄 Restart Plan", "🔄 እቅድ ይጀምሩ"]:
+        # Logic to restart - simplified for now
+        db.add_user(user_id, user_data['username'], user_data['first_name'], user_data['plan_name'], user_data['translation'], lang)
+        msg = "🔄 Plan restarted from Day 1" if lang == 'en' else "🔄 እቅዱ ከቀን 1 እንደገና ተጀምሯል"
+        await update.message.reply_text(msg)
+    elif text in ["📤 Share Bot", "📤 ቦቱን ያጋሩ"]:
+        bot_link = f"https://t.me/{context.bot.username}"
+        share_msg = ("Invite your friends to read the Bible with you!\n\n" if lang == 'en' else "ጓደኞችዎ አብረውዎት መጽሐፍ ቅዱስን እንዲያነቡ ይጋብዙ!\n\n") + bot_link
+        await update.message.reply_text(share_msg)
+    elif text in ["❓ Help", "❓ እርዳታ"]:
+        await update.message.reply_text(Menu.get_help_text(lang), parse_mode='Markdown')
+
+async def show_todays_reading(update: Update, context: ContextTypes.DEFAULT_TYPE, user_data):
+    """Show today's reading for the user"""
+    user_id = user_data['user_id']
+    lang = user_data['language']
     
     # Check if already read today
-    already_read = db.get_todays_reading(user_id)
-    
-    if already_read:
-        await update.message.reply_text("You've already read today's passage! 📖")
+    if db.get_todays_reading(user_id):
+        msg = "You've already completed today's reading! Keep it up! 🔥" if lang == 'en' else "የዛሬውን ንባብ አስቀድመው ጨርሰዋል! በርቱ! 🔥"
+        await update.message.reply_text(msg)
         return
-    
-    # Get today's reading
-    reading = reading_plans.get_todays_reading(
-        user_data['plan_name'], 
-        user_data['current_day']
-    )
+
+    reading = reading_plans.get_todays_reading(user_data['plan_name'], user_data['current_day'])
     
     if reading:
         book = reading['book']
         chapters = reading['chapters']
         
-        # Send each chapter
+        # Translate book name for display if Amharic
+        book_display = reading_plans.amharic_book_names.get(book, book) if lang == 'am' else book
+        
         for chapter in chapters:
-            bible_text = get_bible_text(book, chapter, user_data['translation'])
+            text = bible_api.get_text(book, chapter, user_data['translation'])
+            # Add share button
+            keyboard = [[InlineKeyboardButton("📤 Share", callback_data=f"share_{book}_{chapter}")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(text, reply_markup=reply_markup)
             
-            # Add share button at the end
-            share_text = f"\n\n📤 Share this verse: /share_{book}_{chapter}"
-            full_text = bible_text + share_text
-            
-            await update.message.reply_text(full_text)
+        # Update progress and get current streak
+        streak = db.update_user_progress(user_id, user_data['current_day'], book, chapters[0])
         
-        # Update progress
-        db.update_user_progress(user_id, user_data['current_day'], book, chapters[0])
+        # Check for achievements
+        await check_achievements(update, context, user_id, streak, user_data['current_day'], lang)
         
-        # Show progress
-        total_days = READING_PLANS[user_data['plan_name']]['total_days']
-        progress = f"📊 Day {user_data['current_day']} of {total_days} "
-        progress += f"({(user_data['current_day']/total_days)*100:.1f}%)"
-        
-        await update.message.reply_text(progress)
+        completion_msg = "✅ Reading marked as complete!" if lang == 'en' else "✅ ንባቡ ተጠናቅቋል ተብሎ ተመዝግቧል!"
+        completion_msg += f"\n🔥 Streak: {streak} days"
+        await update.message.reply_text(completion_msg)
     else:
-        await update.message.reply_text("🎉 Congratulations! You've completed your reading plan!")
+        congrats = "🎉 Congratulations! You've finished your reading plan." if lang == 'en' else "🎉 እንኳን ደስ አለዎት! የንባብ እቅድዎን ጨርሰዋል።"
+        await update.message.reply_text(congrats)
 
-async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /today command"""
-    await show_todays_reading(update, context)
+async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE, user_data):
+    """Show user profile, stats, and achievements"""
+    lang = user_data['language']
+    user_id = user_data['user_id']
+    
+    achievements = db.get_achievements(user_id)
+    ach_list = ""
+    if not achievements:
+        ach_list = "No achievements yet." if lang == 'en' else "እስካሁን ምንም ሽልማት የለም።"
+    else:
+        for ach in achievements:
+            ach_list += f"• {ach[0]} ({ach[1]})\n"
+            
+    if lang == 'am':
+        text = (
+            f"👤 **ፕሮፋይል፦ {user_data['first_name']}**\n\n"
+            f"🔥 ወቅታዊ ግስጋሴ፦ {user_data['streak']} ቀናት\n"
+            f"🏆 ከፍተኛ ግስጋሴ፦ {user_data['max_streak']} ቀናት\n"
+            f"📚 እቅድ፦ {READING_PLANS[user_data['plan_name']]['name'][lang]}\n"
+            f"📖 ትርጉም፦ {BIBLE_TRANSLATIONS.get(user_data['translation'], user_data['translation'])}\n\n"
+            f"🏅 **የተገኙ ሽልማቶች፦**\n{ach_list}"
+        )
+    else:
+        text = (
+            f"👤 **Profile: {user_data['first_name']}**\n\n"
+            f"🔥 Current Streak: {user_data['streak']} days\n"
+            f"🏆 Longest Streak: {user_data['max_streak']} days\n"
+            f"📚 Plan: {READING_PLANS[user_data['plan_name']]['name'][lang]}\n"
+            f"📖 Translation: {BIBLE_TRANSLATIONS.get(user_data['translation'], user_data['translation'])}\n\n"
+            f"🏅 **Achievements:**\n{ach_list}"
+        )
+        
+    await update.message.reply_text(text, parse_mode='Markdown')
 
-async def progress_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /progress command"""
-    user_id = update.effective_user.id
-    user_data = db.get_user(user_id)
-    
-    if not user_data:
-        await update.message.reply_text("Please use /start to register first!")
-        return
-    
+async def show_progress(update: Update, context: ContextTypes.DEFAULT_TYPE, user_data):
+    """Show detailed progress charts/stats"""
+    lang = user_data['language']
     total_days = READING_PLANS[user_data['plan_name']]['total_days']
-    percentage = (user_data['current_day'] / total_days) * 100
-    
-    progress_text = f"📊 Your Reading Progress\n\n"
-    progress_text += f"📚 Plan: {READING_PLANS[user_data['plan_name']]['name']}\n"
-    progress_text += f"📖 Translation: {user_data['translation']}\n"
-    progress_text += f"📅 Started: {user_data['start_date']}\n"
-    progress_text += f"🔢 Current Day: {user_data['current_day']} of {total_days}\n"
-    progress_text += f"📈 Progress: {percentage:.1f}%\n\n"
+    current_day = user_data['current_day']
+    percentage = (current_day / total_days) * 100
     
     # Progress bar
-    bars = 20
-    filled_bars = int(percentage / 100 * bars)
-    progress_bar = "█" * filled_bars + "░" * (bars - filled_bars)
-    progress_text += f"{progress_bar}"
+    bars = 15
+    filled = int((current_day / total_days) * bars)
+    bar = "🟩" * filled + "⬜" * (bars - filled)
     
-    await update.message.reply_text(progress_text)
+    if lang == 'am':
+        text = (
+            f"📊 **የንባብ ግስጋሴ**\n\n"
+            f"እቅድ፦ {READING_PLANS[user_data['plan_name']]['name'][lang]}\n"
+            f"ቀን፦ {current_day} ከ {total_days}\n"
+            f"በመቶኛ፦ {percentage:.1f}%\n\n"
+            f"{bar}"
+        )
+    else:
+        text = (
+            f"📊 **Reading Progress**\n\n"
+            f"Plan: {READING_PLANS[user_data['plan_name']]['name'][lang]}\n"
+            f"Day: {current_day} of {total_days}\n"
+            f"Completion: {percentage:.1f}%\n\n"
+            f"{bar}"
+        )
+        
+    await update.message.reply_text(text, parse_mode='Markdown')
 
-async def share_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle share command"""
-    # Extract book and chapter from command
-    command_text = update.message.text
-    if '_' in command_text:
-        parts = command_text.split('_')
-        if len(parts) >= 3:
-            book = parts[1]
-            chapter = parts[2]
-            
-            share_text = f"📖 {book} Chapter {chapter}\n\n"
-            share_text += f"Shared via Daily Bible Reader Bot\n"
-            share_text += f"Start your reading plan with /start"
-            
-            await update.message.reply_text(share_text)
-            return
+async def check_achievements(update, context, user_id, streak, total_reads, lang):
+    """Check and award achievements"""
+    awards = []
     
-    await update.message.reply_text("Use /today to get today's reading and share it!")
+    if streak == 7:
+        awards.append("🔥 7-Day Flame" if lang == 'en' else "🔥 የ7 ቀን እሳት")
+    elif streak == 30:
+        awards.append("⭐ Monthly Star" if lang == 'en' else "⭐ የወር ኮከብ")
+        
+    if total_reads == 1:
+        awards.append("🌱 First Step" if lang == 'en' else "🌱 የመጀመሪያው እርምጃ")
+    elif total_reads == 100:
+        awards.append("🏆 Century Club" if lang == 'en' else "🏆 የመቶዎች ክለብ")
+
+    for award in awards:
+        db.add_achievement(user_id, award)
+        celebration = "🎊 New Achievement Unlocked! 🎊\n\n" if lang == 'en' else "🎊 አዲስ ሽልማት ተገኝቷል! 🎊\n\n"
+        await update.message.reply_text(celebration + award)
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancel the conversation"""
-    await update.message.reply_text(
-        'Registration cancelled. Use /start to begin again.',
-        reply_markup=ReplyKeyboardRemove()
-    )
+    """Cancel registration"""
+    await update.message.reply_text("Cancelled.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
 def main():
-    """Start the bot"""
-    # Get token from environment
     token = os.getenv('BOT_TOKEN')
-    
     if not token:
-        print("❌ ERROR: BOT_TOKEN not found in .env file!")
+        print("❌ BOT_TOKEN missing!")
         return
-    
-    # Create application
+        
     application = Application.builder().token(token).build()
     
-    # Conversation handler for registration
+    # Onboarding conversation
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
-            CHOOSING_PLAN: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, plan_chosen)
-            ],
-            CHOOSING_TRANSLATION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, translation_chosen)
-            ],
+            CHOOSING_LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, language_chosen)],
+            CHOOSING_PLAN: [MessageHandler(filters.TEXT & ~filters.COMMAND, plan_chosen)],
+            CHOOSING_TRANSLATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, translation_chosen)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
     
-    # Add handlers
     application.add_handler(conv_handler)
-    application.add_handler(CommandHandler('today', today_command))
-    application.add_handler(CommandHandler('progress', progress_command))
-    application.add_handler(CommandHandler('share', share_command))
     
-    # Start the bot
-    print("🤖 Bible Bot is starting...")
+    # Main menu handler
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu_click))
+    
+    # Generic commands
+    application.add_handler(CommandHandler('help', lambda u, c: u.message.reply_text(Menu.get_help_text())))
+    
+    print("🤖 Bible Bot is running...")
     application.run_polling()
 
 if __name__ == '__main__':
