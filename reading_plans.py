@@ -22,6 +22,36 @@ class ReadingPlans:
             "Jude", "Revelation"
         ]
         
+        # Amharic Book Names Mapping
+        self.amharic_book_names = {
+            "Genesis": "ኦሪት ዘፍጥረት", "Exodus": "ኦሪት ዘጸአት", "Leviticus": "ኦሪት ዘሌዋውያን", 
+            "Numbers": "ኦሪት ዘኍልኍ", "Deuteronomy": "ኦሪት ዘዳግም", "Joshua": "መጽሐፈ ኢያሱ", 
+            "Judges": "መጽሐፈ መሳፍንት", "Ruth": "መጽሐፈ ሩት", "1 Samuel": "መጽሐፈ ሳሙኤል ቀዳማዊ", 
+            "2 Samuel": "መጽሐፈ ሳሙኤል ካልዕ", "1 Kings": "መጽሐፈ ነገሥት ቀዳማዊ", 
+            "2 Kings": "መጽሐፈ ነገሥት ካልዕ", "1 Chronicles": "መጽሐፈ ዜና መዋዕል ቀዳማዊ", 
+            "2 Chronicles": "መጽሐፈ ዜና መዋዕል ካልዕ", "Ezra": "መጽሐፈ ዕዝራ", 
+            "Nehemiah": "መጽሐፈ ነህምያ", "Esther": "መጽሐፈ አስቴር", "Job": "መጽሐፈ ኢዮብ", 
+            "Psalms": "መዝሙረ ዳዊት", "Proverbs": "መጽሐፈ ምሳሌ", "Ecclesiastes": "መጽሐፈ መክብብ", 
+            "Song of Solomon": "ማኅልየ ማኅልይ", "Isaiah": "ትንቢተ ኢሳይያስ", "Jeremiah": "ትንቢተ ኤርምያስ", 
+            "Lamentations": "ሰቆቃው ኤርምያስ", "Ezekiel": "ትንቢተ ሕዝቅኤል", "Daniel": "ትንቢተ ዳንኤል", 
+            "Hosea": "ትንቢተ ሆሴዕ", "Joel": "ትንቢተ ኢዩኤል", "Amos": "ትንቢተ አሞጽ", 
+            "Obadiah": "ትንቢተ አብድዩ", "Jonah": "ትንቢተ ዮናስ", "Micah": "ትንቢተ ሚክያስ", 
+            "Nahum": "ትንቢተ ናሆም", "Habakkuk": "ትንቢተ ዕንባቆም", "Zephaniah": "ትንቢተ ሶፎንያስ", 
+            "Haggai": "ትንቢተ ሐጌ", "Zechariah": "ትንቢተ ዘካርያስ", "Malachi": "ትንቢተ ሚልክያስ",
+            "Matthew": "የማቴዎስ ወንጌል", "Mark": "የማርቆስ ወንጌል", "Luke": "የሉቃስ ወንጌል", 
+            "John": "የዮሐንስ ወንጌል", "Acts": "የሐዋርያት ሥራ", "Romans": "ወደ ሮሜ ሰዎች", 
+            "1 Corinthians": "1ኛ ወደ ቆሮንቶስ ሰዎች", "2 Corinthians": "2ኛ ወደ ቆሮንቶስ ሰዎች", 
+            "Galatians": "ወደ ገላትያ ሰዎች", "Ephesians": "ወደ ኤፌሶን ሰዎች", "Philippians": "ወደ ፊልጵስዩስ ሰዎች", 
+            "Colossians": "ወደ ቆላስይስ ሰዎች", "1 Thessalonians": "1ኛ ወደ ተሰሎንቄ ሰዎች", 
+            "2 Thessalonians": "2ኛ ወደ ተሰሎንቄ ሰዎች", "1 Timothy": "1ኛ ወደ ጢሞቴዎስ", 
+            "2 Timothy": "2ኛ ወደ ጢሞቴዎስ", "Titus": "ወደ ቲቶ", "Philemon": "ወደ ፊልሞና", 
+            "Hebrews": "ወደ ዕብራውያን", "James": "የያዕቆብ መልእክት", "1 Peter": "1ኛ የጴጥሮስ መልእክት", 
+            "2 Peter": "2ኛ የጴጥሮስ መልእክት", "1 John": "1ኛ የዮሐንስ መልእክት", 
+            "2 John": "2ኛ የዮሐንስ መልእክት", "3 John": "3ኛ የዮሐንስ መልእክት", "Jude": "የይሁዳ መልእክት", 
+            "Revelation": "የዮሐንስ ራእይ"
+        }
+
+        
         # Approximate chapter counts for each book
         self.book_chapters = {
             "Genesis": 50, "Exodus": 40, "Leviticus": 27, "Numbers": 36, "Deuteronomy": 34,

@@ -23,9 +23,13 @@ class Database:
                 username TEXT,
                 first_name TEXT,
                 plan_name TEXT,
+                language TEXT DEFAULT 'en',
+                translation TEXT DEFAULT 'ESV',
                 start_date TEXT,
                 current_day INTEGER DEFAULT 1,
-                translation TEXT DEFAULT 'ESV',
+                streak INTEGER DEFAULT 0,
+                max_streak INTEGER DEFAULT 0,
+                last_read_date TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -41,12 +45,36 @@ class Database:
                 PRIMARY KEY (user_id, date)
             )
         ''')
+
+        # Achievements table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS achievements (
+                user_id INTEGER,
+                achievement_id TEXT,
+                date_earned TEXT,
+                PRIMARY KEY (user_id, achievement_id)
+            )
+        ''')
+
+        # Favorites table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS favorites (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                book TEXT,
+                chapter INTEGER,
+                verse INTEGER,
+                text TEXT,
+                date_saved TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
         
         conn.commit()
         conn.close()
         print("Database initialized successfully!")
     
-    def add_user(self, user_id, username, first_name, plan_name, translation='ESV'):
+    def add_user(self, user_id, username, first_name, plan_name, translation='ESV', language='en'):
         """Add a new user to the database"""
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -55,13 +83,14 @@ class Database:
         
         cursor.execute('''
             INSERT OR REPLACE INTO users 
-            (user_id, username, first_name, plan_name, start_date, translation, current_day)
-            VALUES (?, ?, ?, ?, ?, ?, 1)
-        ''', (user_id, username, first_name, plan_name, start_date, translation))
+            (user_id, username, first_name, plan_name, start_date, translation, language, current_day, streak, max_streak)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0, 0)
+        ''', (user_id, username, first_name, plan_name, start_date, translation, language))
         
         conn.commit()
         conn.close()
         return True
+
     
     def get_user(self, user_id):
         """Get user data"""
@@ -69,28 +98,50 @@ class Database:
         cursor = conn.cursor()
         
         cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
-        user = cursor.fetchone()
+        user_row = cursor.fetchone()
         
         conn.close()
         
-        if user:
+        if user_row:
+            # Match columns with the table structure
             return {
-                'user_id': user[0],
-                'username': user[1],
-                'first_name': user[2],
-                'plan_name': user[3],
-                'start_date': user[4],
-                'current_day': user[5],
-                'translation': user[6]
+                'user_id': user_row[0],
+                'username': user_row[1],
+                'first_name': user_row[2],
+                'plan_name': user_row[3],
+                'language': user_row[4],
+                'translation': user_row[5],
+                'start_date': user_row[6],
+                'current_day': user_row[7],
+                'streak': user_row[8],
+                'max_streak': user_row[9],
+                'last_read_date': user_row[10]
             }
         return None
+
     
     def update_user_progress(self, user_id, day_number, book, chapter):
-        """Update user's reading progress"""
+        """Update user's reading progress and streaks"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
         today = datetime.now().strftime('%Y-%m-%d')
+        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        
+        # Get current user data for streak calculation
+        cursor.execute('SELECT streak, max_streak, last_read_date FROM users WHERE user_id = ?', (user_id,))
+        user_data = cursor.fetchone()
+        
+        streak, max_streak, last_read_date = user_data if user_data else (0, 0, None)
+        
+        if last_read_date == yesterday:
+            streak += 1
+        elif last_read_date == today:
+            pass # Already read today, no change to streak
+        else:
+            streak = 1
+        
+        max_streak = max(streak, max_streak)
         
         cursor.execute('''
             INSERT OR REPLACE INTO user_progress 
@@ -98,13 +149,61 @@ class Database:
             VALUES (?, ?, ?, ?, TRUE)
         ''', (user_id, today, book, chapter))
         
-        # Update current day
+        # Update current day, streak, and last_read_date
         cursor.execute('''
-            UPDATE users SET current_day = ? WHERE user_id = ?
-        ''', (day_number, user_id))
+            UPDATE users SET 
+            current_day = ?, 
+            streak = ?, 
+            max_streak = ?, 
+            last_read_date = ?
+            WHERE user_id = ?
+        ''', (day_number + 1, streak, max_streak, today, user_id))
         
         conn.commit()
         conn.close()
+        return streak
+    
+    def add_favorite(self, user_id, book, chapter, verse, text):
+        """Save a favorite verse"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO favorites (user_id, book, chapter, verse, text)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (user_id, book, chapter, verse, text))
+        conn.commit()
+        conn.close()
+    
+    def get_favorites(self, user_id):
+        """Get all favorites for a user"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT book, chapter, verse, text FROM favorites WHERE user_id = ?', (user_id,))
+        favorites = cursor.fetchall()
+        conn.close()
+        return favorites
+
+    def add_achievement(self, user_id, achievement_id):
+        """Earn an achievement"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        today = datetime.now().strftime('%Y-%m-%d')
+        cursor.execute('''
+            INSERT OR IGNORE INTO achievements (user_id, achievement_id, date_earned)
+            VALUES (?, ?, ?)
+        ''', (user_id, achievement_id, today))
+        conn.commit()
+        conn.close()
+
+    def get_achievements(self, user_id):
+        """Get all achievements for a user"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT achievement_id, date_earned FROM achievements WHERE user_id = ?', (user_id,))
+        achievements = cursor.fetchall()
+        conn.close()
+        return achievements
+
     
     def get_todays_reading(self, user_id):
         """Check if user has read today's passage"""
