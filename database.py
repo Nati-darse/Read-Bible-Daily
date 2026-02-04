@@ -30,8 +30,10 @@ class Database:
                 streak INTEGER DEFAULT 0,
                 max_streak INTEGER DEFAULT 0,
                 last_read_date TEXT,
+                notification_times TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
+
         ''')
         
         # User progress table
@@ -162,6 +164,39 @@ class Database:
         conn.commit()
         conn.close()
         return streak
+
+    def reset_user_progress(self, user_id):
+        """Reset user progress but keep settings"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Reset user stats in users table
+        # We KEEP: plan_name, translation, language, notification_times, username, first_name
+        # We RESET: start_date, current_day, streak, max_streak, last_read_date
+        
+        new_start_date = datetime.now().strftime('%Y-%m-%d')
+        
+        cursor.execute('''
+            UPDATE users SET 
+            start_date = ?, 
+            current_day = 1, 
+            streak = 0, 
+            max_streak = 0, 
+            last_read_date = NULL
+            WHERE user_id = ?
+        ''', (new_start_date, user_id))
+        
+        # Delete progress history
+        cursor.execute('DELETE FROM user_progress WHERE user_id = ?', (user_id,))
+        
+        # We do NOT delete achievements or favorites? 
+        # Usually a "Restart Plan" implies restarting READING checkmarks.
+        # Let's keep achievements as "Legacy" or maybe wipe them? 
+        # For now, let's WIPE achievements as it's a "Restart".
+        cursor.execute('DELETE FROM achievements WHERE user_id = ?', (user_id,))
+        
+        conn.commit()
+        conn.close()
     
     def add_favorite(self, user_id, book, chapter, verse, text):
         """Save a favorite verse"""
@@ -218,6 +253,38 @@ class Database:
         result = cursor.fetchone()
         conn.close()
         return result is not None
+
+    def update_notification_times(self, user_id, times):
+        """Update notification times for a user"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # times should be a comma-separated string or JSON string
+        cursor.execute('UPDATE users SET notification_times = ? WHERE user_id = ?', (times, user_id))
+        
+        conn.commit()
+        conn.close()
+
+    def get_notification_times(self, user_id):
+        """Get notification times for a user"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT notification_times FROM users WHERE user_id = ?', (user_id,))
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else None
+    
+    def get_users_with_notification_time(self, time_str):
+        """Get all user IDs who have selected a specific notification time"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        # Ensure we match the time properly in the comma-separated string
+        # Using %time_str% pattern matching
+        cursor.execute("SELECT user_id, language, plan_name, translation, current_day FROM users WHERE notification_times LIKE ?", (f'%{time_str}%',))
+        users = cursor.fetchall()
+        conn.close()
+        return [{'user_id': u[0], 'language': u[1], 'plan_name': u[2], 'translation': u[3], 'current_day': u[4]} for u in users]
+
 
 # Create global database instance
 db = Database()

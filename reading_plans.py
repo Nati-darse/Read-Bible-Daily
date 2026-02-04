@@ -1,5 +1,4 @@
 # reading_plans.py - Calculate daily readings based on plans
-from datetime import datetime, timedelta
 
 class ReadingPlans:
     def __init__(self):
@@ -22,22 +21,28 @@ class ReadingPlans:
             "Jude", "Revelation"
         ]
         
-        # Amharic Book Names Mapping
+        # Amharic Book Names Mapping (Must match amharic_bible.json titles)
         self.amharic_book_names = {
             "Genesis": "ኦሪት ዘፍጥረት", "Exodus": "ኦሪት ዘጸአት", "Leviticus": "ኦሪት ዘሌዋውያን", 
-            "Numbers": "ኦሪት ዘኍልኍ", "Deuteronomy": "ኦሪት ዘዳግም", "Joshua": "መጽሐፈ ኢያሱ", 
-            "Judges": "መጽሐፈ መሳፍንት", "Ruth": "መጽሐፈ ሩት", "1 Samuel": "መጽሐፈ ሳሙኤል ቀዳማዊ", 
-            "2 Samuel": "መጽሐፈ ሳሙኤል ካልዕ", "1 Kings": "መጽሐፈ ነገሥት ቀዳማዊ", 
-            "2 Kings": "መጽሐፈ ነገሥት ካልዕ", "1 Chronicles": "መጽሐፈ ዜና መዋዕል ቀዳማዊ", 
-            "2 Chronicles": "መጽሐፈ ዜና መዋዕል ካልዕ", "Ezra": "መጽሐፈ ዕዝራ", 
-            "Nehemiah": "መጽሐፈ ነህምያ", "Esther": "መጽሐፈ አስቴር", "Job": "መጽሐፈ ኢዮብ", 
+            "Numbers": "ኦሪት ዘኍልቍ", "Deuteronomy": "ኦሪት ዘዳግም", "Joshua": "መጽሐፈ ኢያሱ ወልደ ነዌ", 
+ 
+            "Judges": "መጽሐፈ መሣፍንት", "Ruth": "መጽሐፈ ሩት", "1 Samuel": "መጽሐፈ ሳሙኤል ቀዳማዊ", 
+ 
+            "2 Samuel": "መጽሐፈ ሳሙኤል ካል", "1 Kings": "መጽሐፈ ነገሥት ቀዳማዊ።", 
+            "2 Kings": "መጽሐፈ ነገሥት ካልዕ።", "1 Chronicles": "መጽሐፈ ዜና መዋዕል ቀዳማዊ።", 
+            "2 Chronicles": "መጽሐፈ ዜና መዋዕል ካልዕ።", "Ezra": "መጽሐፈ ዕዝራ።", 
+            "Nehemiah": "መጽሐፈ ነህምያ።", "Esther": "መጽሐፈ አስቴር።", "Job": "መጽሐፈ ኢዮብ።", 
+ 
             "Psalms": "መዝሙረ ዳዊት", "Proverbs": "መጽሐፈ ምሳሌ", "Ecclesiastes": "መጽሐፈ መክብብ", 
-            "Song of Solomon": "ማኅልየ ማኅልይ", "Isaiah": "ትንቢተ ኢሳይያስ", "Jeremiah": "ትንቢተ ኤርምያስ", 
+            "Song of Solomon": "መኃልየ መኃልይ ዘሰሎሞን", "Isaiah": "ትንቢተ ኢሳይያስ", "Jeremiah": "ትንቢተ ኤርምያስ", 
+ 
             "Lamentations": "ሰቆቃው ኤርምያስ", "Ezekiel": "ትንቢተ ሕዝቅኤል", "Daniel": "ትንቢተ ዳንኤል", 
-            "Hosea": "ትንቢተ ሆሴዕ", "Joel": "ትንቢተ ኢዩኤል", "Amos": "ትንቢተ አሞጽ", 
+            "Hosea": "ትንቢተ ሆሴዕ", "Joel": "ትንቢተ ኢዮኤል", "Amos": "ትንቢተ አሞጽ", 
+ 
             "Obadiah": "ትንቢተ አብድዩ", "Jonah": "ትንቢተ ዮናስ", "Micah": "ትንቢተ ሚክያስ", 
             "Nahum": "ትንቢተ ናሆም", "Habakkuk": "ትንቢተ ዕንባቆም", "Zephaniah": "ትንቢተ ሶፎንያስ", 
-            "Haggai": "ትንቢተ ሐጌ", "Zechariah": "ትንቢተ ዘካርያስ", "Malachi": "ትንቢተ ሚልክያስ",
+            "Haggai": "ትንቢተ ሐጌ", "Zechariah": "ትንቢተ ዘካርያስ", "Malachi": "ትንቢተ ሚልክያ",
+
             "Matthew": "የማቴዎስ ወንጌል", "Mark": "የማርቆስ ወንጌል", "Luke": "የሉቃስ ወንጌል", 
             "John": "የዮሐንስ ወንጌል", "Acts": "የሐዋርያት ሥራ", "Romans": "ወደ ሮሜ ሰዎች", 
             "1 Corinthians": "1ኛ ወደ ቆሮንቶስ ሰዎች", "2 Corinthians": "2ኛ ወደ ቆሮንቶስ ሰዎች", 
@@ -50,9 +55,8 @@ class ReadingPlans:
             "2 John": "2ኛ የዮሐንስ መልእክት", "3 John": "3ኛ የዮሐንስ መልእክት", "Jude": "የይሁዳ መልእክት", 
             "Revelation": "የዮሐንስ ራእይ"
         }
-
         
-        # Approximate chapter counts for each book
+        # Chapter counts
         self.book_chapters = {
             "Genesis": 50, "Exodus": 40, "Leviticus": 27, "Numbers": 36, "Deuteronomy": 34,
             "Joshua": 24, "Judges": 21, "Ruth": 4, "1 Samuel": 31, "2 Samuel": 24,
@@ -69,56 +73,57 @@ class ReadingPlans:
             "1 Peter": 5, "2 Peter": 3, "1 John": 5, "2 John": 1, "3 John": 1,
             "Jude": 1, "Revelation": 22
         }
-    
-    def get_psalms_plan(self, day_number):
-        """Get Psalms reading for the day (30-day plan)"""
-        # Psalms has 150 chapters, spread over 30 days = 5 chapters per day
-        start_chapter = (day_number - 1) * 5 + 1
-        end_chapter = min(start_chapter + 4, 150)
+
+    def get_sequential_reading(self, day_number, books, target_days):
+        """Generic logic for sequential reading plans"""
+        # Calculate total chapters in the selected books
+        total_chapters = sum(self.book_chapters[b] for b in books)
+        chapters_per_day = max(1, total_chapters // target_days)
         
-        return {
-            'book': 'Psalms',
-            'chapters': list(range(start_chapter, end_chapter + 1)),
-            'day': day_number,
-            'total_days': 30
-        }
-    
-    def get_bible_year_plan(self, day_number):
-        """Get Bible reading for the day (365-day plan)"""
-        # Simplified plan: Read books in order
-        total_chapters = sum(self.book_chapters.values())
-        chapters_per_day = total_chapters // 365
+        # Find start and end chapter indices
+        start_idx = (day_number - 1) * chapters_per_day
+        end_idx = start_idx + chapters_per_day
         
-        current_day = 1
-        current_chapter = 1
-        
-        for book in self.bible_books:
-            book_chapters = self.book_chapters[book]
+        # If it's the last day, include all remaining chapters
+        if day_number == target_days:
+            end_idx = total_chapters
             
-            for chapter in range(1, book_chapters + 1):
-                if current_day == day_number:
-                    return {
-                        'book': book,
-                        'chapters': [chapter],
-                        'day': day_number,
-                        'total_days': 365
-                    }
-                
-                current_chapter += 1
-                if current_chapter > chapters_per_day:
-                    current_day += 1
-                    current_chapter = 1
+        current_idx = 0
+        reading_list = [] # List of {book, chapters}
         
+        for book in books:
+            num_chapters = self.book_chapters[book]
+            for chapter in range(1, num_chapters + 1):
+                if current_idx >= start_idx and current_idx < end_idx:
+                    # check if we already have this book in the list
+                    if reading_list and reading_list[-1]['book'] == book:
+                        reading_list[-1]['chapters'].append(chapter)
+                    else:
+                        reading_list.append({'book': book, 'chapters': [chapter]})
+                current_idx += 1
+                
+        # Return the first entry of the day (simplified for bot structure)
+        # The bot currently expects a single book per day message
+        if reading_list:
+            return {
+                'book': reading_list[0]['book'],
+                'chapters': reading_list[0]['chapters'],
+                'day': day_number,
+                'total_days': target_days
+            }
         return None
-    
+
     def get_todays_reading(self, plan_name, day_number):
         """Get today's reading based on plan"""
         if plan_name == 'psalms_in_one_month':
-            return self.get_psalms_plan(day_number)
+            return self.get_sequential_reading(day_number, ["Psalms"], 30)
         elif plan_name == 'bible_in_one_year':
-            return self.get_bible_year_plan(day_number)
+            return self.get_sequential_reading(day_number, self.bible_books, 365)
+        elif plan_name == 'new_testament_in_six_months':
+            nt_books = self.bible_books[39:] # Matthew to Revelation
+            return self.get_sequential_reading(day_number, nt_books, 180)
         else:
-            return self.get_bible_year_plan(day_number)  # Default
+            return self.get_sequential_reading(day_number, self.bible_books, 365) # Default
 
 # Create global instance
 reading_plans = ReadingPlans()

@@ -11,6 +11,34 @@ class BibleAPI:
         self.amharic_file = amharic_file
         self.amharic_data = None
         self._load_amharic_data()
+        self.amharic_book_names = {
+            "Genesis": "ኦሪት ዘዘፍጥረት", "Exodus": "ኦሪት ዘጸአት", "Leviticus": "ኦሪት ዘሌዋውያን", 
+            "Numbers": "ኦሪት ዘኍልኍ", "Deuteronomy": "ኦሪት ዘዳግም", "Joshua": "መጽሐፈ ኢያሱ", 
+            "Judges": "መጽሐፈ መሳፍንት", "Ruth": "መጽሐፈ ሩት", "1 Samuel": "መጽሐፈ ሳሙኤል ቀዳማዊ", 
+            "2 Samuel": "መጽሐፈ ሳሙኤል ካልዕ", "1 Kings": "መጽሐፈ ነገሥት ቀዳማዊ", 
+            "2 Kings": "መጽሐፈ ነገሥት ካልዕ", "1 Chronicles": "መጽሐፈ ዜና መዋዕል ቀዳማዊ", 
+            "2 Chronicles": "መጽሐፈ ዜና መዋዕል ካልዕ", "Ezra": "መጽሐፈ ዕዝራ", 
+            "Nehemiah": "መጽሐፈ ነህምያ", "Esther": "መጽሐፈ አስቴር", "Job": "መጽሐፈ ኢዮብ", 
+            "Psalms": "መዝሙረ ዳዊት", "Proverbs": "መጽሐፈ ምሳሌ", "Ecclesiastes": "መጽሐፈ መክብብ", 
+            "Song of Solomon": "ማኅልየ ማኅልይ", "Isaiah": "ትንቢተ ኢሳይያስ", "Jeremiah": "ትንቢተ ኤርምያስ", 
+            "Lamentations": "ሰቆቃው ኤርምያስ", "Ezekiel": "ትንቢተ ሕዝቅኤል", "Daniel": "ትንቢተ ዳንኤል", 
+            "Hosea": "ትንቢተ ሆሴዕ", "Joel": "ትንቢተ ኢዩኤል", "Amos": "ትንቢተ አሞጽ", 
+            "Obadiah": "ትንቢተ አብድዩ", "Jonah": "ትንቢተ ዮናስ", "Micah": "ትንቢተ ሚክያስ", 
+            "Nahum": "ትንቢተ ናሆም", "Habakkuk": "ትንቢተ ዕንባቆም", "Zephaniah": "ትንቢተ ሶፎንያስ", 
+            "Haggai": "ትንቢተ ሐጌ", "Zechariah": "ትንቢተ ዘካርያስ", "Malachi": "ትንቢተ ሚልክያስ",
+            "Matthew": "የማቴዎስ ወንጌል", "Mark": "የማርቆስ ወንጌል", "Luke": "የሉቃስ ወንጌል", 
+            "John": "የዮሐንስ ወንጌል", "Acts": "የሐዋርያት ሥራ", "Romans": "ወደ ሮሜ ሰዎች", 
+            "1 Corinthians": "1ኛ ወደ ቆሮንቶስ ሰዎች", "2 Corinthians": "2ኛ ወደ ቆሮንቶስ ሰዎች", 
+            "Galatians": "ወደ ገላትያ ሰዎች", "Ephesians": "ወደ ኤፌሶን ሰዎች", "Philippians": "ወደ ፊልጵስዩስ ሰዎች", 
+            "Colossians": "ወደ ቆላስይስ ሰዎች", "1 Thessalonians": "1ኛ ወደ ተሰሎንቄ ሰዎች", 
+            "2 Thessalonians": "2ኛ ወደ ተሰሎንቄ ሰዎች", "1 Timothy": "1ኛ ወደ ጢሞቴዎስ", 
+            "2 Timothy": "2ኛ ወደ ጢሞቴዎስ", "Titus": "ወደ ቲቶ", "Philemon": "ወደ ፊልሞና", 
+            "Hebrews": "ወደ ዕብራውያን", "James": "የያዕቆብ መልእክት", "1 Peter": "1ኛ የጴጥሮስ መልእክት", 
+            "2 Peter": "2ኛ የጴጥሮስ መልእክት", "1 John": "1ኛ የዮሐንስ መልእክት", 
+            "2 John": "2ኛ የዮሐንስ መልእክት", "3 John": "3ኛ የዮሐንስ መልእክት", "Jude": "የይሁዳ መልእክት", 
+            "Revelation": "የዮሐንስ ራእይ"
+        }
+
 
     def _load_amharic_data(self):
         """Load local Amharic Bible data"""
@@ -55,27 +83,48 @@ class BibleAPI:
             logger.error(f"Error fetching Bible text: {e}")
             return f"❌ Error fetching {book} {chapter}. Please try again later."
 
-    def get_amharic_text(self, book, chapter):
-        """Fetch Amharic Bible text from local JSON"""
-        if not self.amharic_data:
+    def get_amharic_text(self, book_en, chapter_num):
+        """Fetch Amharic Bible text using index-based lookup"""
+        if not self.amharic_data or 'books' not in self.amharic_data:
             return "❌ Amharic Bible data not loaded. Please contact admin."
         
-        # Check if book and chapter exist
-        book_data = self.amharic_data.get(book)
-        if not book_data:
-            return f"❌ መጽሐፉ አልተገኘም፦ {book}"
+        # Standard Bible book order
+        bible_books_order = [
+            "Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy", "Joshua", "Judges", "Ruth",
+            "1 Samuel", "2 Samuel", "1 Kings", "2 Kings", "1 Chronicles", "2 Chronicles", "Ezra", "Nehemiah", "Esther", "Job",
+            "Psalms", "Proverbs", "Ecclesiastes", "Song of Solomon", "Isaiah", "Jeremiah", "Lamentations", "Ezekiel", "Daniel",
+            "Hosea", "Joel", "Amos", "Obadiah", "Jonah", "Micah", "Nahum", "Habakkuk", "Zephaniah", "Haggai", "Zechariah", "Malachi",
+            "Matthew", "Mark", "Luke", "John", "Acts", "Romans", "1 Corinthians", "2 Corinthians", "Galatians", "Ephesians", "Philippians", "Colossians",
+            "1 Thessalonians", "2 Thessalonians", "1 Timothy", "2 Timothy", "Titus", "Philemon", "Hebrews", "James", "1 Peter", "2 Peter", "1 John", "2 John", "3 John", "Jude", "Revelation"
+        ]
         
-        chapter_data = book_data.get(str(chapter))
+        try:
+            book_index = bible_books_order.index(book_en)
+            book_data = self.amharic_data['books'][book_index]
+        except (ValueError, IndexError):
+            logger.warning(f"Book not found or index out of range: {book_en}")
+            return f"❌ መጽሐፉ አልተገኘም፦ {book_en}"
+        
+        # Find the chapter
+        chapter_data = None
+        for c in book_data['chapters']:
+            if str(c['chapter']) == str(chapter_num):
+                chapter_data = c
+                break
+                
         if not chapter_data:
-            return f"❌ ምዕራፉ አልተገኘም፦ {book} {chapter}"
+            return f"❌ ምዕራፉ አልተገኘም፦ {book_data['title']} {chapter_num}"
         
-        text = f"📖 {book} ምዕራፍ {chapter} (አማርኛ)\n\n"
+        # Use the title from the JSON for the header
+        text = f"📖 {book_data['title']} ምዕራፍ {chapter_num} (አማርኛ)\n\n"
         
-        # chapter_data should be a dictionary of {verse_num: text}
-        for verse_num, verse_text in sorted(chapter_data.items(), key=lambda x: int(x[0])):
-            text += f"{verse_num}. {verse_text}\n"
+        for i, verse_text in enumerate(chapter_data['verses'], 1):
+            text += f"{i}. {verse_text}\n"
             
         return text[:4000]
 
+
+
 # Create global instance
 bible_api = BibleAPI()
+

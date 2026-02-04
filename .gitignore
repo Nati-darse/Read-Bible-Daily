@@ -1,5 +1,6 @@
 .env
-*.db
 __pycache__/
-*.pyc
-.vscode/
+*.py[cod]
+*.session
+*.session-journal
+bible_bot.db

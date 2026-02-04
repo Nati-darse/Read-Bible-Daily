@@ -66,15 +66,59 @@ class Menu:
             keyboard = [
                 [InlineKeyboardButton("🌐 ቋንቋ ቀይር", callback_data="set_lang")],
                 [InlineKeyboardButton("📖 ትርጉም ቀይር", callback_data="set_trans")],
-                [InlineKeyboardButton("📚 እቅዱን ቀይር", callback_data="set_plan")]
+                [InlineKeyboardButton("📖 ትርጉም ቀይር", callback_data="set_trans")],
+                [InlineKeyboardButton("📚 እቅዱን ቀይር", callback_data="set_plan")],
+                [InlineKeyboardButton("⏰ ማስታወሻዎችን ቀይር", callback_data="set_times")]
             ]
+
         else:
             keyboard = [
                 [InlineKeyboardButton("🌐 Change Language", callback_data="set_lang")],
                 [InlineKeyboardButton("📖 Change Translation", callback_data="set_trans")],
-                [InlineKeyboardButton("📚 Change Plan", callback_data="set_plan")]
+                [InlineKeyboardButton("📚 Change Plan", callback_data="set_plan")],
+                [InlineKeyboardButton("⏰ Change Notification Times", callback_data="set_times")]
             ]
         return InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def get_time_selection_menu(selected_times=None, language='en'):
+        """Get notification time selection menu"""
+        if selected_times is None:
+            selected_times = []
+            
+        from config import NOTIFICATION_TIMES
+        
+        keyboard = []
+        row = []
+        for time in NOTIFICATION_TIMES:
+            # Mark selected times with checkmark or disable
+            label = f"✅ {time}" if time in selected_times else time
+            # If already 2 selected, maybe allow deselecting? 
+            # For simplicity, we assume sequential selection of 2 different times.
+            
+            row.append(InlineKeyboardButton(label, callback_data=f"time_{time}"))
+            if len(row) == 3:
+                keyboard.append(row)
+                row = []
+        if row:
+            keyboard.append(row)
+            
+        return InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def get_yes_no_menu(language='en', action='restart'):
+        """Get Yes/No confirmation menu"""
+        yes_lbl = "አዎ" if language == 'am' else "Yes"
+        no_lbl = "አይ" if language == 'am' else "No"
+        
+        keyboard = [
+            [
+                InlineKeyboardButton(f"✅ {yes_lbl}", callback_data=f"{action}_yes"),
+                InlineKeyboardButton(f"❌ {no_lbl}", callback_data=f"{action}_no")
+            ]
+        ]
+        return InlineKeyboardMarkup(keyboard)
+
 
     @staticmethod
     def get_help_text(language='en'):

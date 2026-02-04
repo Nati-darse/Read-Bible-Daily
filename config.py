@@ -14,6 +14,11 @@ BIBLE_TRANSLATIONS = {
     'AMH': 'Amharic Bible (አማርኛ)'
 }
 
+NOTIFICATION_TIMES = [
+    "06:00", "09:00", "12:00", "15:00", "18:00", "21:00"
+]
+
+
 # Reading plans
 READING_PLANS = {
     'bible_in_one_year': {
@@ -65,6 +70,15 @@ MESSAGES = {
         'en': "📖 Choose your preferred Bible translation:",
         'am': "📖 የሚመርጡትን የመጽሐፍ ቅዱስ ትርጉም ይምረጡ፦"
     },
+    'choose_times_1': {
+        'en': "⏰ Please choose your **first** preferred daily notification time:",
+        'am': "⏰ እባክዎ ዕለታዊ ማስታወሻ የሚላክበትን **የመጀመሪያ** ሰዓት ይምረጡ፦"
+    },
+    'choose_times_2': {
+        'en': "⏰ Great! Now please choose your **second** preferred notification time:",
+        'am': "⏰ ጥሩ! አሁን ደግሞ ማስታወሻ የሚላክበትን **ሁለተኛ** ሰዓት ይምረጡ፦"
+    },
+
     'registration_complete': {
         'en': "✅ Registration complete!\n\n📚 Plan: {plan}\n📖 Translation: {translation}\n\nUse the menu below to navigate.",
         'am': "✅ ምዝገባው ተጠናቅቋል!\n\n📚 እቅድ፦ {plan}\n📖 ትርጉም፦ {translation}\n\nለመጠቀም ከታች ያለውን ሜኑ ይጠቀሙ።"

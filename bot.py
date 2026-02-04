@@ -22,12 +22,13 @@ load_dotenv()
 # Enable logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    level=logging.DEBUG
 )
 logger = logging.getLogger(__name__)
 
 # Conversation states
-CHOOSING_LANGUAGE, CHOOSING_PLAN, CHOOSING_TRANSLATION = range(3)
+CHOOSING_LANGUAGE, CHOOSING_PLAN, CHOOSING_TRANSLATION, CHOOSING_TIMES = range(4)
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Entry point: Check if user exists or start onboarding"""
@@ -101,34 +102,92 @@ async def translation_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE)
     elif 'NIV' in choice:
         translation = 'NIV'
         
-    lang = context.user_data.get('language', 'en')
-    user = update.effective_user
+    context.user_data['translation'] = translation
     
-    # Save user to database
-    db.add_user(
-        user_id=user.id,
-        username=user.username,
-        first_name=user.first_name,
-        plan_name=context.user_data['plan'],
-        translation=translation,
-        language=lang
-    )
-    
-    plan_name = READING_PLANS[context.user_data['plan']]['name'][lang]
-    trans_name = BIBLE_TRANSLATIONS.get(translation, translation)
-    
+    # Save partial user data to context to persist through next step
+    # Ask for first notification time
     await update.message.reply_text(
-        MESSAGES['registration_complete'][lang].format(plan=plan_name, translation=trans_name),
-        reply_markup=Menu.get_main_menu(lang)
+        MESSAGES['choose_times_1'][lang],
+        reply_markup=Menu.get_time_selection_menu()
     )
     
-    return ConversationHandler.END
+    return CHOOSING_TIMES
+
+async def times_chosen_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle notification time selection (Callback)"""
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+    time_selected = data.split('_')[1]
+    
+    user_times = context.user_data.get('notification_times', [])
+    
+    # Check if this is the first or second selection
+    if len(user_times) == 0:
+        user_times.append(time_selected)
+        context.user_data['notification_times'] = user_times
+        lang = context.user_data.get('language', 'en')
+        
+        # Ask for second time
+        await query.message.reply_text(
+            MESSAGES['choose_times_2'][lang],
+            reply_markup=Menu.get_time_selection_menu(selected_times=user_times)
+        )
+        return CHOOSING_TIMES
+        
+    else:
+        # Second time selected
+        if time_selected not in user_times:
+            user_times.append(time_selected)
+        
+        # Save everything to DB
+        user = update.effective_user
+        lang = context.user_data.get('language', 'en')
+        
+        # Combine times into string
+        times_str = ",".join(user_times)
+        
+        # If user exists, just update times. If new, add user.
+        existing = db.get_user(user.id)
+        if existing:
+             db.update_notification_times(user.id, times_str)
+        else:
+            db.add_user(
+                user_id=user.id,
+                username=user.username,
+                first_name=user.first_name,
+                plan_name=context.user_data['plan'],
+                translation=context.user_data['translation'],
+                language=lang
+            )
+            db.update_notification_times(user.id, times_str)
+            
+        plan_name = READING_PLANS[context.user_data['plan']]['name'][lang]
+        trans_name = BIBLE_TRANSLATIONS.get(context.user_data['translation'], context.user_data['translation'])
+        
+        await query.message.reply_text(
+            MESSAGES['registration_complete'][lang].format(plan=plan_name, translation=trans_name),
+            reply_markup=Menu.get_main_menu(lang)
+        )
+        
+        # Show reading
+        user_data = db.get_user(user.id)
+        if user_data:
+            await show_todays_reading(query, context, user_data)
+            
+        return ConversationHandler.END
+
+
 
 async def handle_menu_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle main menu button clicks"""
     text = update.message.text
     user_id = update.effective_user.id
+    logger.info(f"Menu click from {user_id}: {text}")
+    
     user_data = db.get_user(user_id)
+
     
     if not user_data:
         await start(update, context)
@@ -149,10 +208,10 @@ async def handle_menu_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=Menu.get_settings_menu(lang)
         )
     elif text in ["🔄 Restart Plan", "🔄 እቅድ ይጀምሩ"]:
-        # Logic to restart - simplified for now
-        db.add_user(user_id, user_data['username'], user_data['first_name'], user_data['plan_name'], user_data['translation'], lang)
-        msg = "🔄 Plan restarted from Day 1" if lang == 'en' else "🔄 እቅዱ ከቀን 1 እንደገና ተጀምሯል"
-        await update.message.reply_text(msg)
+
+        msg = "⚠️ Are you sure you want to restart your plan from Day 1? This cannot be undone." if lang == 'en' else "⚠️ እቅድዎን ከቀን 1 እንደገና መጀመር ይፈልጋሉ? ይህን እርምጃ መቀልበስ አይቻልም።"
+        await update.message.reply_text(msg, reply_markup=Menu.get_yes_no_menu(lang, 'restart'))
+
     elif text in ["📤 Share Bot", "📤 ቦቱን ያጋሩ"]:
         bot_link = f"https://t.me/{context.bot.username}"
         share_msg = ("Invite your friends to read the Bible with you!\n\n" if lang == 'en' else "ጓደኞችዎ አብረውዎት መጽሐፍ ቅዱስን እንዲያነቡ ይጋብዙ!\n\n") + bot_link
@@ -172,31 +231,46 @@ async def show_todays_reading(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     reading = reading_plans.get_todays_reading(user_data['plan_name'], user_data['current_day'])
+    logger.info(f"Reading for {user_id} (Day {user_data['current_day']}): {reading}")
     
     if reading:
         book = reading['book']
         chapters = reading['chapters']
+        logger.info(f"Targeting: {book} Chapters {chapters}")
         
         # Translate book name for display if Amharic
         book_display = reading_plans.amharic_book_names.get(book, book) if lang == 'am' else book
         
-        for chapter in chapters:
-            text = bible_api.get_text(book, chapter, user_data['translation'])
-            # Add share button
-            keyboard = [[InlineKeyboardButton("📤 Share", callback_data=f"share_{book}_{chapter}")]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(text, reply_markup=reply_markup)
+        try:
+            for chapter in chapters:
+                text = bible_api.get_text(book, chapter, user_data['translation'])
+                logger.info(f"Fetched text for {book} {chapter} ({user_data['translation']}), length: {len(text)}")
+                
+                # Add share button
+                share_label = "📤 አጋራ" if lang == 'am' else "📤 Share"
+                keyboard = [[InlineKeyboardButton(share_label, callback_data=f"share_{book}_{chapter}")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(text, reply_markup=reply_markup)
+                
+            # Update progress and get current streak
+            streak = db.update_user_progress(user_id, user_data['current_day'], book, chapters[0])
             
-        # Update progress and get current streak
-        streak = db.update_user_progress(user_id, user_data['current_day'], book, chapters[0])
-        
-        # Check for achievements
-        await check_achievements(update, context, user_id, streak, user_data['current_day'], lang)
-        
-        completion_msg = "✅ Reading marked as complete!" if lang == 'en' else "✅ ንባቡ ተጠናቅቋል ተብሎ ተመዝግቧል!"
-        completion_msg += f"\n🔥 Streak: {streak} days"
-        await update.message.reply_text(completion_msg)
+            # Check for achievements
+            await check_achievements(update, context, user_id, streak, user_data['current_day'], lang)
+            
+            completion_msg = "✅ Reading marked as complete!" if lang == 'en' else "✅ ንባቡ ተጠናቅቋል ተብሎ ተመዝግቧል!"
+            streak_label = "ቀናት" if lang == 'am' else "days"
+            completion_msg += f"\n🔥 Streak: {streak} {streak_label}"
+            await update.message.reply_text(completion_msg)
+
+        except Exception as e:
+            logger.error(f"Error in show_todays_reading for user {user_id}: {e}")
+            error_msg = "❌ Sorry, an error occurred while fetching your reading. Please try again or /start."
+            if lang == 'am':
+                error_msg = "❌ የዛሬውን ንባብ በማቅረብ ላይ ስህተት ተከስቷል። እባክዎ እንደገና ይሞክሩ።"
+            await update.message.reply_text(error_msg)
     else:
+
         congrats = "🎉 Congratulations! You've finished your reading plan." if lang == 'en' else "🎉 እንኳን ደስ አለዎት! የንባብ እቅድዎን ጨርሰዋል።"
         await update.message.reply_text(congrats)
 
@@ -289,31 +363,189 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Cancelled.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
+async def settings_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle settings menu button clicks to start configuration flow"""
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+    user_id = update.effective_user.id
+    user_data = db.get_user(user_id)
+    lang = user_data['language'] if user_data else 'en'
+    
+    # Ensure language is in context for next steps
+    context.user_data['language'] = lang
+    if user_data:
+        context.user_data['plan'] = user_data.get('plan_name', 'bible_in_one_year')
+    
+    if data == 'set_lang':
+        keyboard = [["English", "አማርኛ (Amharic)"]]
+        reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+        await query.message.reply_text(
+            MESSAGES['choose_language'][lang],
+            reply_markup=reply_markup
+        )
+        return CHOOSING_LANGUAGE
+        
+    elif data == 'set_plan':
+        await query.message.reply_text(
+            MESSAGES['welcome'][lang].format(name=update.effective_user.first_name),
+            reply_markup=Menu.get_plan_menu(lang)
+        )
+        return CHOOSING_PLAN
+        
+    elif data == 'set_trans':
+        # Ensure we have a plan in context, otherwise default or ask
+        if 'plan' not in context.user_data:
+             context.user_data['plan'] = 'bible_in_one_year'
+             
+        await query.message.reply_text(
+            MESSAGES['choose_translation'][lang],
+            reply_markup=Menu.get_translation_menu(lang)
+        )
+        return CHOOSING_TRANSLATION
+
+    elif data == 'set_times':
+        context.user_data['notification_times'] = [] # Reset selection
+        await query.message.reply_text(
+            MESSAGES['choose_times_1'][lang],
+            reply_markup=Menu.get_time_selection_menu()
+        )
+        return CHOOSING_TIMES
+
+
+async def handle_share_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle share button click"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Format: share_Book_Chapter
+    try:
+        _, book, chapter = query.data.split('_', 2)
+        lang = context.user_data.get('language', 'en')
+        
+        # In a real app, this would generate a deep link or share text
+        # For now, just provide a copyable text
+        share_text = f"Read {book} {chapter} with me on Daily Bible Bot! @{context.bot.username}"
+        if lang == 'am':
+            share_text = f"በ Daily Bible Bot ላይ {book} {chapter} አብረን እናንብብ! @{context.bot.username}"
+            
+        await query.message.reply_text(share_text)
+    except Exception as e:
+        logger.error(f"Share callback error: {e}")
+
+async def handle_restart_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle restart confirmation"""
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+    user_id = update.effective_user.id
+    user_data = db.get_user(user_id)
+    lang = user_data['language'] if user_data else 'en'
+    
+    if data == 'restart_yes':
+        # Reset user safely
+        db.reset_user_progress(user_id)
+        msg = "🔄 Plan restarted from Day 1." if lang == 'en' else "🔄 እቅዱ ከቀን 1 እንደገና ተጀምሯል::"
+        await query.message.edit_text(msg)
+    else:
+        msg = "❌ Restart cancelled." if lang == 'en' else "❌ እንደገና መጀመር ተሰርዟል።"
+        await query.message.edit_text(msg)
+
+async def check_notifications(context: ContextTypes.DEFAULT_TYPE):
+    """Job to check and send notifications"""
+    # Get current time rounded to hour:00 usually
+    now_str = datetime.now().strftime('%H:00')
+    logger.info(f"Checking notifications for {now_str}")
+    
+    # Get users who want notifications at this time
+    users_to_notify = db.get_users_with_notification_time(now_str)
+    
+    for user in users_to_notify:
+        try:
+            # We construct a fake user_data dict to reuse show_todays_reading logic if possible
+            # But show_todays_reading takes update object which we don't have.
+            # So we manually fetch reading and send.
+            user_id = user['user_id']
+            lang = user['language']
+            
+            # Send the reading
+            # We can reuse the logic but verify inputs
+            if db.get_todays_reading(user_id):
+                 logger.info(f"User {user_id} already read today, skipping notification.")
+                 continue
+                 
+            reading = reading_plans.get_todays_reading(user['plan_name'], user['current_day'])
+            if reading:
+                book = reading['book']
+                chapters = reading['chapters']
+                book_display = reading_plans.amharic_book_names.get(book, book) if lang == 'am' else book
+                
+                header = f"🔔 Daily Reminder / ዕለታዊ ማስታወሻ\n\n"
+                await context.bot.send_message(user_id, header)
+                
+                # Fetch text loop
+                for chapter in chapters:
+                    text = bible_api.get_text(book, chapter, user['translation'])
+                    # Share button
+                    share_label = "📤 አጋራ" if lang == 'am' else "📤 Share"
+                    keyboard = [[InlineKeyboardButton(share_label, callback_data=f"share_{book}_{chapter}")]]
+                    await context.bot.send_message(user_id, text, reply_markup=InlineKeyboardMarkup(keyboard))
+                    
+                # We do NOT mark as read automatically on notification? 
+                # Usually better to let them read it. But sending the text IS reading it.
+                # Let's mark it done.
+                db.update_user_progress(user_id, user['current_day'], book, chapters[0])
+                
+        except Exception as e:
+            logger.error(f"Error sending notification to {user['user_id']}: {e}")
+
+
+
 def main():
     token = os.getenv('BOT_TOKEN')
     if not token:
         print("❌ BOT_TOKEN missing!")
         return
         
-    application = Application.builder().token(token).build()
+    application = Application.builder().token(token).connect_timeout(60).read_timeout(60).build()
     
     # Onboarding conversation
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
+        entry_points=[
+            CommandHandler('start', start),
+            CallbackQueryHandler(settings_entry, pattern='^set_')
+        ],
         states={
             CHOOSING_LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, language_chosen)],
             CHOOSING_PLAN: [MessageHandler(filters.TEXT & ~filters.COMMAND, plan_chosen)],
             CHOOSING_TRANSLATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, translation_chosen)],
+            CHOOSING_TIMES: [CallbackQueryHandler(times_chosen_callback, pattern='^time_')]
         },
         fallbacks=[CommandHandler('cancel', cancel)],
+
     )
     
     application.add_handler(conv_handler)
     
+    # Share button handler
+    application.add_handler(CallbackQueryHandler(handle_share_callback, pattern='^share_'))
+    
     # Main menu handler
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu_click))
     
+    # Restart confirmation handler
+    application.add_handler(CallbackQueryHandler(handle_restart_callback, pattern='^restart_'))
+    
+    # Setup job queue
+    job_queue = application.job_queue
+    # Run every hour to check for notifications
+    # First run in 10 seconds
+    job_queue.run_repeating(check_notifications, interval=3600, first=10)
+    
     # Generic commands
+
     application.add_handler(CommandHandler('help', lambda u, c: u.message.reply_text(Menu.get_help_text())))
     
     print("🤖 Bible Bot is running...")
