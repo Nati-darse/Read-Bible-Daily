@@ -10,7 +10,6 @@ LANGUAGES = {
 BIBLE_TRANSLATIONS = {
     'ESV': 'English Standard Version',
     'KJV': 'King James Version',
-    'NIV': 'New International Version',
     'AMH': 'Amharic Bible (አማርኛ)'
 }
 

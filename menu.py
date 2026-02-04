@@ -51,7 +51,7 @@ class Menu:
     @staticmethod
     def get_translation_menu(language='en'):
         """Get translation selection menu"""
-        keyboard = [["ESV", "KJV", "NIV"]]
+        keyboard = [["ESV", "KJV"]]
         if language == 'am':
             keyboard[0].append("AMH (አማርኛ)")
         else:
