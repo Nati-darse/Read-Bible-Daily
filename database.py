@@ -121,6 +121,19 @@ class Database:
             }
         return None
 
+    def delete_user(self, user_id):
+        """Delete a user completely from the database"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('DELETE FROM users WHERE user_id = ?', (user_id,))
+        cursor.execute('DELETE FROM user_progress WHERE user_id = ?', (user_id,))
+        cursor.execute('DELETE FROM achievements WHERE user_id = ?', (user_id,))
+        cursor.execute('DELETE FROM favorites WHERE user_id = ?', (user_id,))
+        
+        conn.commit()
+        conn.close()
+
     
     def update_user_progress(self, user_id, day_number, book, chapter):
         """Update user's reading progress and streaks"""

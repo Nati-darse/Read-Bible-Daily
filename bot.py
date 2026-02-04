@@ -368,6 +368,21 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Cancelled.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
+async def reset_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Reset user data completely and prompt to re-register"""
+    user_id = update.effective_user.id
+    user_data = db.get_user(user_id)
+    lang = user_data['language'] if user_data else 'en'
+    
+    db.delete_user(user_id)
+    
+    if lang == 'am':
+        msg = "🗑️ መለያዎ ሙሉ በሙሉ ተሰርዟል።\n\nእንደገና ለመመዝገብ /start ይላኩ።"
+    else:
+        msg = "🗑️ Your account has been completely deleted.\n\nSend /start to register again with fresh settings."
+    
+    await update.message.reply_text(msg, reply_markup=ReplyKeyboardRemove())
+
 async def settings_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle settings menu button clicks to start configuration flow"""
     query = update.callback_query
@@ -566,6 +581,7 @@ def main():
     # Generic commands
 
     application.add_handler(CommandHandler('help', lambda u, c: u.message.reply_text(Menu.get_help_text())))
+    application.add_handler(CommandHandler('reset', reset_user))
     
     print("🤖 Bible Bot is running...")
     
