@@ -51,11 +51,10 @@ class Menu:
     @staticmethod
     def get_translation_menu(language='en'):
         """Get translation selection menu"""
-        keyboard = [["ESV", "KJV"]]
         if language == 'am':
-            keyboard[0].append("AMH (አማርኛ)")
+            keyboard = [["AMH (አማርኛ)", "ESV", "KJV"]]
         else:
-            keyboard[0].append("Amharic")
+            keyboard = [["Amharic", "ESV", "KJV"]]
             
         return ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
 
