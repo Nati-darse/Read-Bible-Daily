@@ -498,10 +498,25 @@ async def check_notifications(context: ContextTypes.DEFAULT_TYPE):
                 # Let's mark it done.
                 db.update_user_progress(user_id, user['current_day'], book, chapters[0])
                 
-        except Exception as e:
             logger.error(f"Error sending notification to {user['user_id']}: {e}")
 
 
+
+# Dummy server for Render
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is active")
+
+def start_dummy_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    logger.info(f"dummy server listening on port {port}")
+    server.serve_forever()
 
 def main():
     token = os.getenv('BOT_TOKEN')
@@ -549,6 +564,10 @@ def main():
     application.add_handler(CommandHandler('help', lambda u, c: u.message.reply_text(Menu.get_help_text())))
     
     print("🤖 Bible Bot is running...")
+    
+    # Start dummy server in background thread
+    threading.Thread(target=start_dummy_server, daemon=True).start()
+    
     application.run_polling()
 
 if __name__ == '__main__':
