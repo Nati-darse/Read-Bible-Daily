@@ -16,6 +16,10 @@ from reading_plans import reading_plans
 from bible_api import bible_api
 from menu import Menu
 
+# Dummy server for Render
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
+
 # Load environment variables
 load_dotenv()
 
@@ -498,13 +502,10 @@ async def check_notifications(context: ContextTypes.DEFAULT_TYPE):
                 # Let's mark it done.
                 db.update_user_progress(user_id, user['current_day'], book, chapters[0])
                 
+        except Exception as e:
             logger.error(f"Error sending notification to {user['user_id']}: {e}")
 
 
-
-# Dummy server for Render
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import threading
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
