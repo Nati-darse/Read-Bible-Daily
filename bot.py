@@ -531,7 +531,9 @@ def main():
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler('start', start),
-            CallbackQueryHandler(settings_entry, pattern='^set_')
+            CallbackQueryHandler(settings_entry, pattern='^set_'),
+            # Fix for loop: Allow language selection to start conversation if state is lost
+            MessageHandler(filters.Regex('^(English|አማርኛ \(Amharic\))$'), language_chosen)
         ],
         states={
             CHOOSING_LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, language_chosen)],
