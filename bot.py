@@ -528,6 +528,14 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"Bot is active")
+    
+    def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()
+    
+    def log_message(self, format, *args):
+        # Suppress default HTTP logging to keep logs clean
+        pass
 
 def start_dummy_server():
     port = int(os.environ.get("PORT", 8080))
