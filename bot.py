@@ -107,6 +107,7 @@ async def translation_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE)
         translation = 'NIV'
         
     context.user_data['translation'] = translation
+    lang = context.user_data.get('language', 'en')
     
     # Save partial user data to context to persist through next step
     # Ask for first notification time
