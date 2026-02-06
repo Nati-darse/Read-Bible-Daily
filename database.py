@@ -1,7 +1,15 @@
 # database.py - Handle user data storage
 import sqlite3
 import json
+import os
 from datetime import datetime, timedelta
+import pytz
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Constants
+ET_TZ = pytz.timezone('Africa/Addis_Ababa')
 
 class Database:
     def __init__(self, db_name='bible_bot.db'):
@@ -81,7 +89,7 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        start_date = datetime.now().strftime('%Y-%m-%d')
+        start_date = datetime.now(ET_TZ).strftime('%Y-%m-%d')
         
         cursor.execute('''
             INSERT OR REPLACE INTO users 
@@ -140,8 +148,9 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        today = datetime.now().strftime('%Y-%m-%d')
-        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        now_eat = datetime.now(ET_TZ)
+        today = now_eat.strftime('%Y-%m-%d')
+        yesterday = (now_eat - timedelta(days=1)).strftime('%Y-%m-%d')
         
         # Get current user data for streak calculation
         cursor.execute('SELECT streak, max_streak, last_read_date FROM users WHERE user_id = ?', (user_id,))
@@ -187,7 +196,7 @@ class Database:
         # We KEEP: plan_name, translation, language, notification_times, username, first_name
         # We RESET: start_date, current_day, streak, max_streak, last_read_date
         
-        new_start_date = datetime.now().strftime('%Y-%m-%d')
+        new_start_date = datetime.now(ET_TZ).strftime('%Y-%m-%d')
         
         cursor.execute('''
             UPDATE users SET 
@@ -235,7 +244,7 @@ class Database:
         """Earn an achievement"""
         conn = self.get_connection()
         cursor = conn.cursor()
-        today = datetime.now().strftime('%Y-%m-%d')
+        today = datetime.now(ET_TZ).strftime('%Y-%m-%d')
         cursor.execute('''
             INSERT OR IGNORE INTO achievements (user_id, achievement_id, date_earned)
             VALUES (?, ?, ?)
@@ -255,7 +264,7 @@ class Database:
     
     def get_todays_reading(self, user_id):
         """Check if user has read today's passage"""
-        today = datetime.now().strftime('%Y-%m-%d')
+        today = datetime.now(ET_TZ).strftime('%Y-%m-%d')
         conn = self.get_connection()
         cursor = conn.cursor()
         
