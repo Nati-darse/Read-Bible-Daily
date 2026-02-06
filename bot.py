@@ -474,10 +474,13 @@ async def handle_restart_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.message.edit_text(msg)
 
 async def check_notifications(context: ContextTypes.DEFAULT_TYPE):
-    """Job to check and send notifications"""
-    # Get current time rounded to hour:00 usually
-    now_str = datetime.now().strftime('%H:00')
-    logger.info(f"Checking notifications for {now_str}")
+    """Job to check and send notifications at user-preferred times (EAT timezone)"""
+    import pytz
+    # Use East Africa Time (UTC+3) for Ethiopian users
+    eat_tz = pytz.timezone('Africa/Addis_Ababa')
+    now_eat = datetime.now(eat_tz)
+    now_str = now_eat.strftime('%H:00')
+    logger.info(f"Checking notifications for {now_str} EAT (Local time: {now_eat})")
     
     # Get users who want notifications at this time
     users_to_notify = db.get_users_with_notification_time(now_str)
