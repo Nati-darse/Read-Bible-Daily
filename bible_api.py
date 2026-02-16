@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 class BibleAPI:
     def __init__(self, amharic_file='amharic_bible.json'):
         self.amharic_file = amharic_file
+        self.base_url = os.getenv('BIBLE_API_BASE_URL', 'https://bible-api.com').rstrip('/')
         self.amharic_data = None
         self._load_amharic_data()
         self.amharic_book_names = {
@@ -63,7 +64,7 @@ class BibleAPI:
         """Fetch English Bible text from bible-api.com"""
         book_formatted = book.replace(' ', '+')
         try:
-            url = f"https://bible-api.com/{book_formatted}+{chapter}?translation={translation}"
+            url = f"{self.base_url}/{book_formatted}+{chapter}?translation={translation}"
             response = requests.get(url)
             data = response.json()
             

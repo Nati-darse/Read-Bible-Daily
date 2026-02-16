@@ -65,7 +65,6 @@ class Menu:
             keyboard = [
                 [InlineKeyboardButton("🌐 ቋንቋ ቀይር", callback_data="set_lang")],
                 [InlineKeyboardButton("📖 ትርጉም ቀይር", callback_data="set_trans")],
-                [InlineKeyboardButton("📖 ትርጉም ቀይር", callback_data="set_trans")],
                 [InlineKeyboardButton("📚 እቅዱን ቀይር", callback_data="set_plan")],
                 [InlineKeyboardButton("⏰ ማስታወሻዎችን ቀይር", callback_data="set_times")]
             ]

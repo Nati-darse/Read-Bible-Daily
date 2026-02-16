@@ -56,6 +56,23 @@ class Database:
             )
         ''')
 
+        # Daily chapter completion state (checkbox-style progress)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS daily_chapter_status (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                plan_day INTEGER NOT NULL,
+                book TEXT NOT NULL,
+                chapter INTEGER NOT NULL,
+                completed BOOLEAN DEFAULT FALSE,
+                sent_count INTEGER DEFAULT 0,
+                last_sent_at TEXT,
+                completed_at TEXT,
+                UNIQUE (user_id, date, plan_day, book, chapter)
+            )
+        ''')
+
         # Achievements table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS achievements (
@@ -125,7 +142,8 @@ class Database:
                 'current_day': user_row[7],
                 'streak': user_row[8],
                 'max_streak': user_row[9],
-                'last_read_date': user_row[10]
+                'last_read_date': user_row[10],
+                'notification_times': user_row[11]
             }
         return None
 
@@ -136,6 +154,7 @@ class Database:
         
         cursor.execute('DELETE FROM users WHERE user_id = ?', (user_id,))
         cursor.execute('DELETE FROM user_progress WHERE user_id = ?', (user_id,))
+        cursor.execute('DELETE FROM daily_chapter_status WHERE user_id = ?', (user_id,))
         cursor.execute('DELETE FROM achievements WHERE user_id = ?', (user_id,))
         cursor.execute('DELETE FROM favorites WHERE user_id = ?', (user_id,))
         
@@ -210,6 +229,7 @@ class Database:
         
         # Delete progress history
         cursor.execute('DELETE FROM user_progress WHERE user_id = ?', (user_id,))
+        cursor.execute('DELETE FROM daily_chapter_status WHERE user_id = ?', (user_id,))
         
         # We do NOT delete achievements or favorites? 
         # Usually a "Restart Plan" implies restarting READING checkmarks.
@@ -276,6 +296,141 @@ class Database:
         conn.close()
         return result is not None
 
+    def upsert_daily_chapter(self, user_id, plan_day, book, chapter):
+        """Ensure a daily chapter status row exists for today's plan day."""
+        today = datetime.now(ET_TZ).strftime('%Y-%m-%d')
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT OR IGNORE INTO daily_chapter_status
+            (user_id, date, plan_day, book, chapter, completed, sent_count)
+            VALUES (?, ?, ?, ?, ?, FALSE, 0)
+        ''', (user_id, today, plan_day, book, chapter))
+        conn.commit()
+        conn.close()
+
+    def increment_daily_chapter_send(self, user_id, plan_day, book, chapter):
+        """Track how many times today's chapter has been sent to the user."""
+        today = datetime.now(ET_TZ).strftime('%Y-%m-%d')
+        now_ts = datetime.now(ET_TZ).isoformat()
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE daily_chapter_status
+            SET sent_count = sent_count + 1, last_sent_at = ?
+            WHERE user_id = ? AND date = ? AND plan_day = ? AND book = ? AND chapter = ?
+        ''', (now_ts, user_id, today, plan_day, book, chapter))
+        conn.commit()
+        conn.close()
+
+    def get_daily_chapter(self, user_id, plan_day, book, chapter):
+        """Get today's chapter status row."""
+        today = datetime.now(ET_TZ).strftime('%Y-%m-%d')
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, completed, sent_count
+            FROM daily_chapter_status
+            WHERE user_id = ? AND date = ? AND plan_day = ? AND book = ? AND chapter = ?
+        ''', (user_id, today, plan_day, book, chapter))
+        row = cursor.fetchone()
+        conn.close()
+        if not row:
+            return None
+        return {
+            'id': row[0],
+            'completed': bool(row[1]),
+            'sent_count': row[2]
+        }
+
+    def mark_chapter_completed(self, chapter_status_id, user_id):
+        """Mark a specific chapter checkbox as completed."""
+        now_ts = datetime.now(ET_TZ).isoformat()
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE daily_chapter_status
+            SET completed = TRUE, completed_at = ?
+            WHERE id = ? AND user_id = ? AND completed = FALSE
+        ''', (now_ts, chapter_status_id, user_id))
+        changed = cursor.rowcount > 0
+        cursor.execute('''
+            SELECT date, plan_day, book, chapter, completed
+            FROM daily_chapter_status
+            WHERE id = ? AND user_id = ?
+        ''', (chapter_status_id, user_id))
+        row = cursor.fetchone()
+        conn.commit()
+        conn.close()
+        if not row:
+            return None, False
+        chapter_data = {
+            'date': row[0],
+            'plan_day': row[1],
+            'book': row[2],
+            'chapter': row[3],
+            'completed': bool(row[4])
+        }
+        return chapter_data, changed
+
+    def get_day_completion_summary(self, user_id, plan_day):
+        """Return completed/total chapter count for today's plan day."""
+        today = datetime.now(ET_TZ).strftime('%Y-%m-%d')
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT COUNT(*), COALESCE(SUM(CASE WHEN completed = TRUE THEN 1 ELSE 0 END), 0)
+            FROM daily_chapter_status
+            WHERE user_id = ? AND date = ? AND plan_day = ?
+        ''', (user_id, today, plan_day))
+        row = cursor.fetchone()
+        conn.close()
+        total = row[0] if row else 0
+        completed = row[1] if row else 0
+        return {'total': total, 'completed': completed}
+
+    def complete_day_if_ready(self, user_id, plan_day):
+        """Advance day only when all today's chapter checkboxes are completed."""
+        today = datetime.now(ET_TZ).strftime('%Y-%m-%d')
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('SELECT current_day FROM users WHERE user_id = ?', (user_id,))
+        user_row = cursor.fetchone()
+        if not user_row:
+            conn.close()
+            return {'completed': False}
+
+        current_day = user_row[0]
+        if current_day != plan_day:
+            conn.close()
+            return {'completed': False}
+
+        cursor.execute('''
+            SELECT book, chapter, completed
+            FROM daily_chapter_status
+            WHERE user_id = ? AND date = ? AND plan_day = ?
+            ORDER BY chapter
+        ''', (user_id, today, plan_day))
+        chapter_rows = cursor.fetchall()
+        conn.close()
+
+        if not chapter_rows:
+            return {'completed': False}
+
+        if any(not bool(r[2]) for r in chapter_rows):
+            return {'completed': False}
+
+        if self.get_todays_reading(user_id):
+            return {'completed': False}
+
+        streak = self.update_user_progress(user_id, plan_day, chapter_rows[0][0], chapter_rows[0][1])
+        return {
+            'completed': True,
+            'streak': streak,
+            'new_day': plan_day + 1
+        }
+
     def update_notification_times(self, user_id, times):
         """Update notification times for a user"""
         conn = self.get_connection()
@@ -300,9 +455,12 @@ class Database:
         """Get all user IDs who have selected a specific notification time"""
         conn = self.get_connection()
         cursor = conn.cursor()
-        # Ensure we match the time properly in the comma-separated string
-        # Using %time_str% pattern matching
-        cursor.execute("SELECT user_id, language, plan_name, translation, current_day FROM users WHERE notification_times LIKE ?", (f'%{time_str}%',))
+        cursor.execute('''
+            SELECT user_id, language, plan_name, translation, current_day
+            FROM users
+            WHERE notification_times IS NOT NULL
+              AND (',' || notification_times || ',') LIKE ?
+        ''', (f'%,{time_str},%',))
         users = cursor.fetchall()
         conn.close()
         return [{'user_id': u[0], 'language': u[1], 'plan_name': u[2], 'translation': u[3], 'current_day': u[4]} for u in users]
