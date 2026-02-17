@@ -114,7 +114,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(welcome_back, reply_markup=Menu.get_main_menu(lang))
         return ConversationHandler.END
 
-    keyboard = [["English", "Amharic (አማርኛ)"]]
+    keyboard = [["English", "Amharic"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
     await update.message.reply_text(MESSAGES['choose_language']['en'], reply_markup=reply_markup)
     return CHOOSING_LANGUAGE
@@ -122,7 +122,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def language_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     choice = update.message.text
-    lang = 'am' if ('amharic' in choice.lower() or 'አማር' in choice) else 'en'
+    lang = 'am' if ('amharic' in choice.lower()) else 'en'
     context.user_data['language'] = lang
 
     await update.message.reply_text(
@@ -247,28 +247,28 @@ async def handle_menu_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text_l = text.lower()
 
-    if "today" in text_l or "ንባብ" in text:
+    if text.startswith("📖") or "today" in text_l or "reading" in text_l:
         await show_todays_reading(update, context, user_data)
-    elif "profile" in text_l or "ፕሮፋ" in text:
+    elif text.startswith("👤") or "profile" in text_l:
         await show_profile(update, context, user_data)
-    elif "progress" in text_l or "ግስ" in text:
+    elif text.startswith("📊") or "progress" in text_l:
         await show_progress(update, context, user_data)
-    elif "settings" in text_l or "ቅን" in text:
+    elif text.startswith("⚙️") or "settings" in text_l:
         await update.message.reply_text(
             "Settings",
             reply_markup=Menu.get_settings_menu(lang),
         )
-    elif "restart" in text_l or "እቅ" in text:
+    elif text.startswith("🔄") or "restart" in text_l:
         msg = (
             'Are you sure you want to restart your plan from Day 1? This cannot be undone.'
             if lang == 'en' else
             'Are you sure you want to restart your plan from Day 1? This cannot be undone.'
         )
         await update.message.reply_text(msg, reply_markup=Menu.get_yes_no_menu(lang, 'restart'))
-    elif "share bot" in text_l or "ቦቱ" in text:
+    elif text.startswith("📤") or "share bot" in text_l:
         bot_link = f'https://t.me/{context.bot.username}'
         await update.message.reply_text(bot_link)
-    elif "help" in text_l or "እርዳ" in text:
+    elif text.startswith("❓") or "help" in text_l:
         await update.message.reply_text(Menu.get_help_text(lang), parse_mode='Markdown')
 
 
@@ -312,29 +312,19 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE, user_
     achievements = db.get_achievements(user_id)
     ach_list = ''
     if not achievements:
-        ach_list = 'No achievements yet.' if lang == 'en' else '????? ??? ???? ????'
+        ach_list = 'No achievements yet.'
     else:
         for ach in achievements:
-            ach_list += f'? {ach[0]} ({ach[1]})\n'
+            ach_list += f'- {ach[0]} ({ach[1]})\n'
 
-    if lang == 'am':
-        text = (
-            f"?? **?????: {user_data['first_name']}**\n\n"
-            f"?? ???? ????: {user_data['streak']} ???\n"
-            f"?? ???? ????: {user_data['max_streak']} ???\n"
-            f"?? ???: {READING_PLANS[user_data['plan_name']]['name'][lang]}\n"
-            f"?? ????: {BIBLE_TRANSLATIONS.get(user_data['translation'], user_data['translation'])}\n\n"
-            f"?? **???? ?????:**\n{ach_list}"
-        )
-    else:
-        text = (
-            f"?? **Profile: {user_data['first_name']}**\n\n"
-            f"?? Current Streak: {user_data['streak']} days\n"
-            f"?? Longest Streak: {user_data['max_streak']} days\n"
-            f"?? Plan: {READING_PLANS[user_data['plan_name']]['name'][lang]}\n"
-            f"?? Translation: {BIBLE_TRANSLATIONS.get(user_data['translation'], user_data['translation'])}\n\n"
-            f"?? **Achievements:**\n{ach_list}"
-        )
+    text = (
+        f"**Profile: {user_data['first_name']}**\n\n"
+        f"Current Streak: {user_data['streak']} days\n"
+        f"Longest Streak: {user_data['max_streak']} days\n"
+        f"Plan: {READING_PLANS[user_data['plan_name']]['name'][lang]}\n"
+        f"Translation: {BIBLE_TRANSLATIONS.get(user_data['translation'], user_data['translation'])}\n\n"
+        f"**Achievements:**\n{ach_list}"
+    )
 
     await update.message.reply_text(text, parse_mode='Markdown')
 
@@ -347,24 +337,15 @@ async def show_progress(update: Update, context: ContextTypes.DEFAULT_TYPE, user
 
     bars = 15
     filled = int((completed_days / total_days) * bars)
-    bar = '??' * filled + '?' * (bars - filled)
+    bar = '#' * filled + '-' * (bars - filled)
 
-    if lang == 'am':
-        text = (
-            f"?? **???? ????**\n\n"
-            f"???: {READING_PLANS[user_data['plan_name']]['name'][lang]}\n"
-            f"??: {completed_days} ? {total_days}\n"
-            f"????: {percentage:.1f}%\n\n"
-            f"{bar}"
-        )
-    else:
-        text = (
-            f"?? **Reading Progress**\n\n"
-            f"Plan: {READING_PLANS[user_data['plan_name']]['name'][lang]}\n"
-            f"Day: {completed_days} of {total_days}\n"
-            f"Completion: {percentage:.1f}%\n\n"
-            f"{bar}"
-        )
+    text = (
+        f"**Reading Progress**\n\n"
+        f"Plan: {READING_PLANS[user_data['plan_name']]['name'][lang]}\n"
+        f"Day: {completed_days} of {total_days}\n"
+        f"Completion: {percentage:.1f}%\n\n"
+        f"{bar}"
+    )
 
     await update.message.reply_text(text, parse_mode='Markdown')
 
@@ -373,14 +354,14 @@ async def check_achievements(update, context, user_id, streak, total_reads, lang
     awards = []
 
     if streak == 7:
-        awards.append('?? 7-Day Flame' if lang == 'en' else '?? ?7 ?? ???')
+        awards.append('7-Day Flame')
     elif streak == 30:
-        awards.append('? Monthly Star' if lang == 'en' else '? ??? ???')
+        awards.append('Monthly Star')
 
     if total_reads == 1:
-        awards.append('?? First Step' if lang == 'en' else '?? ??????? ????')
+        awards.append('First Step')
     elif total_reads == 100:
-        awards.append('?? Century Club' if lang == 'en' else '?? ????? ???')
+        awards.append('Century Club')
 
     chat_id = _get_chat_id(update)
     if not chat_id:
@@ -388,7 +369,7 @@ async def check_achievements(update, context, user_id, streak, total_reads, lang
 
     for award in awards:
         db.add_achievement(user_id, award)
-        celebration = 'New achievement unlocked!\n\n' if lang == 'en' else '??? ???? ?????!\n\n'
+        celebration = 'New achievement unlocked!\n\n'
         await context.bot.send_message(chat_id=chat_id, text=celebration + award)
 
 
@@ -409,8 +390,8 @@ async def handle_chapter_done_callback(update: Update, context: ContextTypes.DEF
     if not chapter_data:
         return
 
-    share_label = 'Share' if lang == 'en' else '???'
-    done_label = 'Marked' if lang == 'en' else '??????'
+    share_label = 'Share'
+    done_label = 'Marked'
 
     keyboard = [[
         InlineKeyboardButton(share_label, callback_data=f"share_{chapter_data['book']}_{chapter_data['chapter']}"),
@@ -431,7 +412,7 @@ async def handle_chapter_done_callback(update: Update, context: ContextTypes.DEF
             done_msg = (
                 f'Day complete. Streak: {streak} days'
                 if lang == 'en'
-                else f'??? ??? ?????? ????? ??: {streak}'
+                else f'Day complete. Streak: {streak} days'
             )
             await context.bot.send_message(chat_id=update.effective_chat.id, text=done_msg)
             return
@@ -439,7 +420,7 @@ async def handle_chapter_done_callback(update: Update, context: ContextTypes.DEF
     status_msg = (
         f"Today's completion: {summary['completed']}/{summary['total']}"
         if lang == 'en'
-        else f"??? ????: {summary['completed']}/{summary['total']}"
+        else f"Today's completion: {summary['completed']}/{summary['total']}"
     )
     await context.bot.send_message(chat_id=update.effective_chat.id, text=status_msg)
 
@@ -459,7 +440,7 @@ async def reset_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
         'Your account has been completely deleted.\n\nSend /start to register again.'
         if lang == 'en'
-        else '???? ?? ??? ??????\n\n????? ?????? /start ????'
+        else 'Your account has been completely deleted.\n\nSend /start to register again.'
     )
     await update.message.reply_text(msg, reply_markup=ReplyKeyboardRemove())
 
@@ -478,7 +459,7 @@ async def settings_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['plan'] = user_data.get('plan_name', 'bible_in_one_year')
 
     if data == 'set_lang':
-        keyboard = [["English", "???? (Amharic)"]]
+        keyboard = [["English", "Amharic"]]
         reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
         await query.message.reply_text(MESSAGES['choose_language'][lang], reply_markup=reply_markup)
         return CHOOSING_LANGUAGE
@@ -519,7 +500,7 @@ async def handle_share_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
         share_text = f'Read {book} {chapter} with me on Daily Bible Bot! @{context.bot.username}'
         if lang == 'am':
-            share_text = f'? Daily Bible Bot ?? {book} {chapter} ???? ?????! @{context.bot.username}'
+            share_text = f'Read {book} {chapter} with me on Daily Bible Bot! @{context.bot.username}'
 
         await query.message.reply_text(share_text)
     except Exception as e:
@@ -537,10 +518,10 @@ async def handle_restart_callback(update: Update, context: ContextTypes.DEFAULT_
 
     if data == 'restart_yes':
         db.reset_user_progress(user_id)
-        msg = 'Plan restarted from Day 1.' if lang == 'en' else '??? ??? 1 ????? ??????'
+        msg = 'Plan restarted from Day 1.' if lang == 'en' else 'Plan restarted from Day 1.'
         await query.message.edit_text(msg)
     else:
-        msg = 'Restart cancelled.' if lang == 'en' else '????? ???? ??????'
+        msg = 'Restart cancelled.' if lang == 'en' else 'Restart cancelled.'
         await query.message.edit_text(msg)
 
 
