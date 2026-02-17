@@ -19,6 +19,7 @@ from telegram.ext import (
     ConversationHandler,
     CallbackQueryHandler,
 )
+from telegram.error import Conflict
 
 from config import READING_PLANS, BIBLE_TRANSLATIONS, MESSAGES
 from database import db
@@ -562,6 +563,26 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(Menu.get_help_text(lang), parse_mode='Markdown')
 
 
+async def post_init(application: Application):
+    """Ensure polling mode is cleanly initialized on Telegram side."""
+    try:
+        await application.bot.delete_webhook(drop_pending_updates=True)
+        logger.info('Webhook cleared and pending updates dropped before polling start.')
+    except Exception as e:
+        logger.warning('Could not clear webhook before polling: %s', e)
+
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    """Handle known runtime errors more gracefully."""
+    if isinstance(context.error, Conflict):
+        logger.error(
+            'Telegram Conflict: another bot instance is using getUpdates. '
+            'Ensure only one polling instance is running.'
+        )
+        return
+    logger.exception('Unhandled exception in bot update loop', exc_info=context.error)
+
+
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -589,7 +610,14 @@ def main():
         print('BOT_TOKEN missing!')
         return
 
-    application = Application.builder().token(token).connect_timeout(60).read_timeout(60).build()
+    application = (
+        Application.builder()
+        .token(token)
+        .connect_timeout(60)
+        .read_timeout(60)
+        .post_init(post_init)
+        .build()
+    )
 
     conv_handler = ConversationHandler(
         entry_points=[
@@ -617,11 +645,12 @@ def main():
 
     application.add_handler(CommandHandler('help', help_command))
     application.add_handler(CommandHandler('reset', reset_user))
+    application.add_error_handler(error_handler)
 
     print('Bible Bot is running...')
 
     threading.Thread(target=start_dummy_server, daemon=True).start()
-    application.run_polling()
+    application.run_polling(drop_pending_updates=True)
 
 
 if __name__ == '__main__':
