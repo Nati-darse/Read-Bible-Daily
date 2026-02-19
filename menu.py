@@ -34,18 +34,12 @@ class Menu:
     @staticmethod
     def get_plan_menu(language='en'):
         """Get reading plan selection menu"""
-        if language == 'am':
-            keyboard = [
-                ["📖 መጽሐፍ ቅዱስ በአንድ ዓመት"],
-                ["🙏 መዝሙረ ዳዊት በአንድ ወር"],
-                ["✝️ አዲስ ኪዳን በ6 ወራት"]
-            ]
-        else:
-            keyboard = [
-                ["📖 Bible in One Year"],
-                ["🙏 Psalms in One Month"],
-                ["✝️ New Testament in 6 Months"]
-            ]
+        # Build dynamically from config so new plans appear automatically.
+        icon_cycle = ["1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9.", "10."]
+        keyboard = []
+        for idx, plan in enumerate(READING_PLANS.values()):
+            label = plan['name'].get(language, plan['name'].get('en', 'Plan'))
+            keyboard.append([f"{icon_cycle[idx % len(icon_cycle)]} {label}"])
         return ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
 
     @staticmethod

@@ -20,6 +20,11 @@ class ReadingPlans:
             "1 Peter", "2 Peter", "1 John", "2 John", "3 John",
             "Jude", "Revelation"
         ]
+        self.ot_books = self.bible_books[:39]
+        self.nt_books = self.bible_books[39:]
+        self.gospel_books = ["Matthew", "Mark", "Luke", "John"]
+        # Simplified chronological-ish order with Job first as requested.
+        self.chronological_books = ["Job"] + [b for b in self.bible_books if b != "Job"]
         
         # Amharic Book Names Mapping (Must match amharic_bible.json titles)
         self.amharic_book_names = {
@@ -113,17 +118,85 @@ class ReadingPlans:
             }
         return None
 
+    def _chapter_windows_for_day(self, day_number, total_days, total_chapters):
+        """Map a day to chapter index window using proportional distribution."""
+        if day_number < 1 or day_number > total_days:
+            return 0, 0
+        start_idx = int(((day_number - 1) * total_chapters) / total_days)
+        end_idx = int((day_number * total_chapters) / total_days)
+        return start_idx, end_idx
+
+    def get_multi_book_reading(self, day_number, books, target_days, at_least_one=False):
+        """Return list of passages for a day across one stream of books."""
+        total_chapters = sum(self.book_chapters[b] for b in books)
+        start_idx, end_idx = self._chapter_windows_for_day(day_number, target_days, total_chapters)
+        if at_least_one and day_number <= target_days and end_idx == start_idx and start_idx < total_chapters:
+            end_idx = min(start_idx + 1, total_chapters)
+
+        current_idx = 0
+        reading_list = []
+        for book in books:
+            num_chapters = self.book_chapters[book]
+            for chapter in range(1, num_chapters + 1):
+                if start_idx <= current_idx < end_idx:
+                    if reading_list and reading_list[-1]['book'] == book:
+                        reading_list[-1]['chapters'].append(chapter)
+                    else:
+                        reading_list.append({'book': book, 'chapters': [chapter]})
+                current_idx += 1
+        return reading_list
+
+    def _combine_streams(self, streams):
+        passages = []
+        for stream in streams:
+            passages.extend(stream)
+        return passages
+
     def get_todays_reading(self, plan_name, day_number):
         """Get today's reading based on plan"""
         if plan_name == 'psalms_in_one_month':
-            return self.get_sequential_reading(day_number, ["Psalms"], 30)
+            reading = self.get_sequential_reading(day_number, ["Psalms"], 30)
         elif plan_name == 'bible_in_one_year':
-            return self.get_sequential_reading(day_number, self.bible_books, 365)
+            reading = self.get_sequential_reading(day_number, self.bible_books, 365)
         elif plan_name == 'new_testament_in_six_months':
-            nt_books = self.bible_books[39:] # Matthew to Revelation
-            return self.get_sequential_reading(day_number, nt_books, 180)
+            reading = self.get_sequential_reading(day_number, self.nt_books, 180)
+        elif plan_name == 'esv_through_bible_year_ot_nt':
+            ot = self.get_multi_book_reading(day_number, self.ot_books, 365, at_least_one=True)
+            nt = self.get_multi_book_reading(day_number, self.nt_books, 365, at_least_one=True)
+            passages = self._combine_streams([ot, nt])
+            reading = {'passages': passages, 'day': day_number, 'total_days': 365} if passages else None
+        elif plan_name == 'esv_everyday_in_word':
+            ot = self.get_multi_book_reading(day_number, self.ot_books, 365, at_least_one=True)
+            nt = self.get_multi_book_reading(day_number, self.nt_books, 365, at_least_one=True)
+            psalm_chapter = ((day_number - 1) % self.book_chapters["Psalms"]) + 1
+            prov_chapter = ((day_number - 1) % self.book_chapters["Proverbs"]) + 1
+            passages = self._combine_streams([
+                ot,
+                nt,
+                [{'book': 'Psalms', 'chapters': [psalm_chapter]}],
+                [{'book': 'Proverbs', 'chapters': [prov_chapter]}],
+            ])
+            reading = {'passages': passages, 'day': day_number, 'total_days': 365} if passages else None
+        elif plan_name == 'chronological_job_start':
+            reading = self.get_sequential_reading(day_number, self.chronological_books, 365)
+        elif plan_name == 'blue_letter_ot_nt_730':
+            ot = self.get_multi_book_reading(day_number, self.ot_books, 730, at_least_one=True)
+            nt = self.get_multi_book_reading(day_number, self.nt_books, 730, at_least_one=False)
+            passages = self._combine_streams([ot, nt])
+            reading = {'passages': passages, 'day': day_number, 'total_days': 730} if passages else None
+        elif plan_name == 'gospels_in_30_days':
+            reading = self.get_sequential_reading(day_number, self.gospel_books, 30)
         else:
-            return self.get_sequential_reading(day_number, self.bible_books, 365) # Default
+            reading = self.get_sequential_reading(day_number, self.bible_books, 365)
+
+        # Backward compatibility: normalize to passages list.
+        if reading and 'passages' not in reading and 'book' in reading:
+            reading = {
+                'passages': [{'book': reading['book'], 'chapters': reading['chapters']}],
+                'day': reading.get('day', day_number),
+                'total_days': reading.get('total_days', 365),
+            }
+        return reading
 
 # Create global instance
 reading_plans = ReadingPlans()

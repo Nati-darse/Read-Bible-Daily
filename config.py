@@ -52,6 +52,61 @@ READING_PLANS = {
             'am': 'አዲስ ኪዳንን በ180 ቀናት ውስጥ ያንብቡ'
         },
         'total_days': 180
+    },
+    'esv_through_bible_year_ot_nt': {
+        'name': {
+            'en': 'ESV Through Bible in a Year (OT+NT)',
+            'am': 'ESV Through Bible in a Year (OT+NT)'
+        },
+        'description': {
+            'en': 'Daily Old Testament and New Testament readings in 365 days',
+            'am': 'Daily Old Testament and New Testament readings in 365 days'
+        },
+        'total_days': 365
+    },
+    'esv_everyday_in_word': {
+        'name': {
+            'en': 'ESV Everyday in the Word',
+            'am': 'ESV Everyday in the Word'
+        },
+        'description': {
+            'en': 'Daily OT, NT, Psalms, and Proverbs readings',
+            'am': 'Daily OT, NT, Psalms, and Proverbs readings'
+        },
+        'total_days': 365
+    },
+    'chronological_job_start': {
+        'name': {
+            'en': 'Chronological (Starts with Job)',
+            'am': 'Chronological (Starts with Job)'
+        },
+        'description': {
+            'en': 'Read the Bible chronologically in one year, beginning with Job',
+            'am': 'Read the Bible chronologically in one year, beginning with Job'
+        },
+        'total_days': 365
+    },
+    'blue_letter_ot_nt_730': {
+        'name': {
+            'en': 'Blue Letter OT & NT in 730 Days',
+            'am': 'Blue Letter OT & NT in 730 Days'
+        },
+        'description': {
+            'en': 'Two-year plan covering OT and NT',
+            'am': 'Two-year plan covering OT and NT'
+        },
+        'total_days': 730
+    },
+    'gospels_in_30_days': {
+        'name': {
+            'en': 'Gospels in 30 Days',
+            'am': 'Gospels in 30 Days'
+        },
+        'description': {
+            'en': 'Read Matthew, Mark, Luke, and John in 30 days',
+            'am': 'Read Matthew, Mark, Luke, and John in 30 days'
+        },
+        'total_days': 30
     }
 }
 

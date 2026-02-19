@@ -71,8 +71,7 @@ async def _send_daily_reading_messages(
         await context.bot.send_message(chat_id=chat_id, text=msg)
         return {'sent': False, 'plan_day': plan_day, 'summary': {'completed': 0, 'total': 0}}
 
-    book = reading['book']
-    chapters = reading['chapters']
+    passages = reading.get('passages', [])
 
     if include_header:
         header = ('Daily reminder\\n\\n' if lang == 'en' else 'Reminder\\n\\n')
@@ -82,25 +81,28 @@ async def _send_daily_reading_messages(
     mark_label = 'Mark Read'
     done_label = 'Marked'
 
-    for chapter in chapters:
-        db.upsert_daily_chapter(user_id, plan_day, book, chapter)
-        db.increment_daily_chapter_send(user_id, plan_day, book, chapter)
-        chapter_state = db.get_daily_chapter(user_id, plan_day, book, chapter)
+    for passage in passages:
+        book = passage['book']
+        chapters = passage['chapters']
+        for chapter in chapters:
+            db.upsert_daily_chapter(user_id, plan_day, book, chapter)
+            db.increment_daily_chapter_send(user_id, plan_day, book, chapter)
+            chapter_state = db.get_daily_chapter(user_id, plan_day, book, chapter)
 
-        text = bible_api.get_text(book, chapter, user_data['translation'])
-        chapter_btn = done_label if chapter_state and chapter_state['completed'] else mark_label
-        chapter_id = chapter_state['id'] if chapter_state else 0
+            text = bible_api.get_text(book, chapter, user_data['translation'])
+            chapter_btn = done_label if chapter_state and chapter_state['completed'] else mark_label
+            chapter_id = chapter_state['id'] if chapter_state else 0
 
-        keyboard = [[
-            InlineKeyboardButton(share_label, callback_data=f'share_{book}_{chapter}'),
-            InlineKeyboardButton(chapter_btn, callback_data=f'done_{chapter_id}'),
-        ]]
+            keyboard = [[
+                InlineKeyboardButton(share_label, callback_data=f'share_{book}_{chapter}'),
+                InlineKeyboardButton(chapter_btn, callback_data=f'done_{chapter_id}'),
+            ]]
 
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-        )
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
 
     summary = db.get_day_completion_summary(user_id, plan_day)
     return {'sent': True, 'plan_day': plan_day, 'summary': summary}
