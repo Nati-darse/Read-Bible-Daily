@@ -2,6 +2,7 @@
 import os
 import logging
 from datetime import datetime
+from urllib.parse import urlencode
 from dotenv import load_dotenv
 from telegram import (
     Update,
@@ -498,12 +499,30 @@ async def handle_share_callback(update: Update, context: ContextTypes.DEFAULT_TY
         _, book, chapter = query.data.split('_', 2)
         user = db.get_user(update.effective_user.id)
         lang = user['language'] if user else 'en'
+        translation = user['translation'] if user else 'ESV'
 
-        share_text = f'Read {book} {chapter} with me on Daily Bible Bot! @{context.bot.username}'
-        if lang == 'am':
-            share_text = f'Read {book} {chapter} with me on Daily Bible Bot! @{context.bot.username}'
+        chapter_text = bible_api.get_text(book, chapter, translation)
+        # Keep share payload reasonably short for Telegram URL sharing.
+        chapter_excerpt = chapter_text[:1200]
 
-        await query.message.reply_text(share_text)
+        bot_link = f'https://t.me/{context.bot.username}'
+        share_caption = (
+            f'{book} {chapter}\n\n{chapter_excerpt}\n\nRead with Daily Bible Bot: {bot_link}'
+        )
+        share_url = f'https://t.me/share/url?{urlencode({"url": bot_link, "text": share_caption})}'
+        share_button_text = (
+            'Share to Contact/Group/Channel'
+            if lang == 'en'
+            else 'Share to Contact/Group/Channel'
+        )
+        keyboard = [[InlineKeyboardButton(share_button_text, url=share_url)]]
+
+        preview_msg = (
+            f'Prepared share for {book} {chapter}. Tap the button below to choose contact, group, or channel.'
+            if lang == 'en'
+            else f'Prepared share for {book} {chapter}. Tap the button below to choose contact, group, or channel.'
+        )
+        await query.message.reply_text(preview_msg, reply_markup=InlineKeyboardMarkup(keyboard))
     except Exception as e:
         logger.error('Share callback error: %s', e)
 
