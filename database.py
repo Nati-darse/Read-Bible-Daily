@@ -450,20 +450,71 @@ class Database:
         result = cursor.fetchone()
         conn.close()
         return result[0] if result else None
+
+    def get_todays_passages(self, user_id):
+        """Get today's already-prepared passages for resending same day's word."""
+        today = datetime.now(ET_TZ).strftime('%Y-%m-%d')
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT plan_day, book, chapter
+            FROM daily_chapter_status
+            WHERE user_id = ? AND date = ?
+            ORDER BY id ASC
+        ''', (user_id, today))
+        rows = cursor.fetchall()
+        conn.close()
+
+        if not rows:
+            return None
+
+        plan_day = rows[0][0]
+        passages = []
+        for _, book, chapter in rows:
+            if passages and passages[-1]['book'] == book:
+                passages[-1]['chapters'].append(chapter)
+            else:
+                passages.append({'book': book, 'chapters': [chapter]})
+        return {'plan_day': plan_day, 'passages': passages}
     
     def get_users_with_notification_time(self, time_str):
         """Get all user IDs who have selected a specific notification time"""
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT user_id, language, plan_name, translation, current_day
+            SELECT user_id, language, plan_name, translation, current_day, notification_times
             FROM users
             WHERE notification_times IS NOT NULL
-              AND (',' || notification_times || ',') LIKE ?
-        ''', (f'%,{time_str},%',))
+        ''')
         users = cursor.fetchall()
         conn.close()
-        return [{'user_id': u[0], 'language': u[1], 'plan_name': u[2], 'translation': u[3], 'current_day': u[4]} for u in users]
+        matched = []
+        for u in users:
+            raw_times = (u[5] or '').strip()
+            parsed = []
+            if not raw_times:
+                continue
+
+            # Support legacy formats: CSV, CSV with spaces, or JSON list.
+            try:
+                if raw_times.startswith('['):
+                    loaded = json.loads(raw_times)
+                    if isinstance(loaded, list):
+                        parsed = [str(t).strip() for t in loaded]
+                else:
+                    parsed = [t.strip() for t in raw_times.split(',') if t.strip()]
+            except Exception:
+                parsed = [t.strip() for t in raw_times.replace(';', ',').split(',') if t.strip()]
+
+            if time_str in parsed:
+                matched.append({
+                    'user_id': u[0],
+                    'language': u[1],
+                    'plan_name': u[2],
+                    'translation': u[3],
+                    'current_day': u[4]
+                })
+        return matched
 
 
 # Create global database instance

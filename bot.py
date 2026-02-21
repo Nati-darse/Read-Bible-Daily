@@ -53,25 +53,29 @@ async def _send_daily_reading_messages(
     chat_id: int,
     user_data: dict,
     include_header: bool = False,
+    forced_plan_day: int | None = None,
+    forced_passages: list | None = None,
 ):
     """Send today's reading and attach share + chapter checkbox buttons."""
     user_id = user_data['user_id']
     lang = user_data['language']
-    plan_day = user_data['current_day']
+    plan_day = forced_plan_day if forced_plan_day is not None else user_data['current_day']
 
-    reading = reading_plans.get_todays_reading(user_data['plan_name'], plan_day)
-    logger.info('Reading for %s (day %s): %s', user_id, plan_day, reading)
+    if forced_passages is None:
+        reading = reading_plans.get_todays_reading(user_data['plan_name'], plan_day)
+        logger.info('Reading for %s (day %s): %s', user_id, plan_day, reading)
 
-    if not reading:
-        msg = (
-            "Congratulations! You've finished your reading plan."
-            if lang == 'en'
-            else "Congratulations! You've finished your reading plan."
-        )
-        await context.bot.send_message(chat_id=chat_id, text=msg)
-        return {'sent': False, 'plan_day': plan_day, 'summary': {'completed': 0, 'total': 0}}
-
-    passages = reading.get('passages', [])
+        if not reading:
+            msg = (
+                "Congratulations! You've finished your reading plan."
+                if lang == 'en'
+                else "Congratulations! You've finished your reading plan."
+            )
+            await context.bot.send_message(chat_id=chat_id, text=msg)
+            return {'sent': False, 'plan_day': plan_day, 'summary': {'completed': 0, 'total': 0}}
+        passages = reading.get('passages', [])
+    else:
+        passages = forced_passages
 
     if include_header:
         header = ('Daily reminder\\n\\n' if lang == 'en' else 'Reminder\\n\\n')
@@ -564,8 +568,18 @@ async def check_notifications(context: ContextTypes.DEFAULT_TYPE):
             if not full_user:
                 continue
 
-            if db.get_todays_reading(full_user['user_id']):
-                logger.info('User %s already completed today, skipping reminder.', full_user['user_id'])
+            # Resend same day's prepared word if it already exists, so users
+            # reliably receive both scheduled reminders for the day.
+            todays = db.get_todays_passages(full_user['user_id'])
+            if todays:
+                await _send_daily_reading_messages(
+                    context,
+                    chat_id=full_user['user_id'],
+                    user_data=full_user,
+                    include_header=True,
+                    forced_plan_day=todays['plan_day'],
+                    forced_passages=todays['passages'],
+                )
                 continue
 
             await _send_daily_reading_messages(
