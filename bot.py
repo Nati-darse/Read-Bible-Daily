@@ -2,7 +2,6 @@
 import os
 import logging
 from datetime import datetime
-from urllib.parse import urlencode
 from dotenv import load_dotenv
 from telegram import (
     Update,
@@ -78,7 +77,7 @@ async def _send_daily_reading_messages(
         passages = forced_passages
 
     if include_header:
-        header = ('Daily reminder\\n\\n' if lang == 'en' else 'Reminder\\n\\n')
+        header = ('Daily reminder\n\n' if lang == 'en' else 'Reminder\n\n')
         await context.bot.send_message(chat_id=chat_id, text=header)
 
     share_label = 'Share'
@@ -508,27 +507,12 @@ async def handle_share_callback(update: Update, context: ContextTypes.DEFAULT_TY
         translation = user['translation'] if user else 'ESV'
 
         chapter_text = bible_api.get_text(book, chapter, translation)
-        # Keep share payload reasonably short for Telegram URL sharing.
-        chapter_excerpt = chapter_text[:1200]
-
         bot_link = f'https://t.me/{context.bot.username}'
-        share_caption = (
-            f'{book} {chapter}\n\n{chapter_excerpt}\n\nRead with Daily Bible Bot: {bot_link}'
-        )
-        share_url = f'https://t.me/share/url?{urlencode({"url": bot_link, "text": share_caption})}'
-        share_button_text = (
-            'Share to Contact/Group/Channel'
-            if lang == 'en'
-            else 'Share to Contact/Group/Channel'
-        )
-        keyboard = [[InlineKeyboardButton(share_button_text, url=share_url)]]
-
-        preview_msg = (
-            f'Prepared share for {book} {chapter}. Tap the button below to choose contact, group, or channel.'
-            if lang == 'en'
-            else f'Prepared share for {book} {chapter}. Tap the button below to choose contact, group, or channel.'
-        )
-        await query.message.reply_text(preview_msg, reply_markup=InlineKeyboardMarkup(keyboard))
+        share_message = (
+            f'{chapter_text}\n\nRead with Daily Bible Bot: {bot_link}'
+            )
+        # Send directly in chat so user can forward/share without extra URL button.
+        await query.message.reply_text(share_message[:4000])
     except Exception as e:
         logger.error('Share callback error: %s', e)
 
