@@ -642,18 +642,32 @@ def main():
         entry_points=[
             CommandHandler('start', start),
             CallbackQueryHandler(settings_entry, pattern='^set_'),
-            MessageHandler(filters.Regex(r'^(English|.*\(Amharic\))$'), language_chosen),
+            MessageHandler(filters.Regex(r'^(English|Amharic|.*\(Amharic\))$'), language_chosen),
         ],
         states={
-            CHOOSING_LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, language_chosen)],
-            CHOOSING_PLAN: [MessageHandler(filters.TEXT & ~filters.COMMAND, plan_chosen)],
-            CHOOSING_TRANSLATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, translation_chosen)],
-            CHOOSING_TIMES: [CallbackQueryHandler(times_chosen_callback, pattern='^time_')],
+            CHOOSING_LANGUAGE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, language_chosen),
+                CallbackQueryHandler(settings_entry, pattern='^set_'),
+            ],
+            CHOOSING_PLAN: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, plan_chosen),
+                CallbackQueryHandler(settings_entry, pattern='^set_'),
+            ],
+            CHOOSING_TRANSLATION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, translation_chosen),
+                CallbackQueryHandler(settings_entry, pattern='^set_'),
+            ],
+            CHOOSING_TIMES: [
+                CallbackQueryHandler(times_chosen_callback, pattern='^time_'),
+                CallbackQueryHandler(settings_entry, pattern='^set_'),
+            ],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
 
     application.add_handler(conv_handler)
+    # Redundant global route so settings callbacks still work if conversation state is lost.
+    application.add_handler(CallbackQueryHandler(settings_entry, pattern='^set_'))
     application.add_handler(CallbackQueryHandler(handle_share_callback, pattern='^share_'))
     application.add_handler(CallbackQueryHandler(handle_chapter_done_callback, pattern='^done_'))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu_click))
