@@ -680,10 +680,29 @@ def main():
     application.add_handler(CommandHandler('reset', reset_user))
     application.add_error_handler(error_handler)
 
-    print('Bible Bot is running...')
+    port = int(os.getenv('PORT', 8080))
+    render_url = (os.getenv('RENDER_EXTERNAL_URL') or '').strip()
+    webhook_base = (os.getenv('WEBHOOK_BASE_URL') or render_url).strip()
+    use_webhook = (
+        (os.getenv('USE_WEBHOOK', 'true' if webhook_base else 'false').lower() == 'true')
+        and bool(webhook_base)
+    )
 
-    threading.Thread(target=start_dummy_server, daemon=True).start()
-    application.run_polling(drop_pending_updates=True)
+    if use_webhook:
+        webhook_path = (os.getenv('WEBHOOK_PATH') or token).strip('/')
+        webhook_url = f"{webhook_base.rstrip('/')}/{webhook_path}"
+        print('Bible Bot is running in webhook mode...')
+        application.run_webhook(
+            listen='0.0.0.0',
+            port=port,
+            url_path=webhook_path,
+            webhook_url=webhook_url,
+            drop_pending_updates=True,
+        )
+    else:
+        print('Bible Bot is running in polling mode...')
+        threading.Thread(target=start_dummy_server, daemon=True).start()
+        application.run_polling(drop_pending_updates=True)
 
 
 if __name__ == '__main__':
