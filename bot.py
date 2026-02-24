@@ -602,6 +602,39 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     logger.exception('Unhandled exception in bot update loop', exc_info=context.error)
 
 
+def enable_webhook_health_routes():
+    """Patch PTB webhook app to expose root health endpoints for Render checks."""
+    try:
+        import tornado.web
+        import telegram.ext._utils.webhookhandler as wh
+
+        class HealthHandler(tornado.web.RequestHandler):
+            def get(self):
+                self.set_status(200)
+                self.write("Bot is active")
+
+            def head(self):
+                self.set_status(200)
+
+        original_cls = wh.WebhookAppClass
+
+        class PatchedWebhookAppClass(original_cls):
+            def __init__(self, webhook_path, bot, update_queue, secret_token=None):
+                super().__init__(webhook_path, bot, update_queue, secret_token)
+                self.add_handlers(
+                    r".*$",
+                    [
+                        (r"/", HealthHandler),
+                        (r"/health/?", HealthHandler),
+                    ],
+                )
+
+        wh.WebhookAppClass = PatchedWebhookAppClass
+        logger.info("Webhook health routes enabled for / and /health")
+    except Exception as e:
+        logger.warning("Failed to patch webhook health routes: %s", e)
+
+
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -689,6 +722,7 @@ def main():
     )
 
     if use_webhook:
+        enable_webhook_health_routes()
         webhook_path = (os.getenv('WEBHOOK_PATH') or token).strip('/')
         webhook_url = f"{webhook_base.rstrip('/')}/{webhook_path}"
         print('Bible Bot is running in webhook mode...')
