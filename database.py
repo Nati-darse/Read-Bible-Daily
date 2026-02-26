@@ -442,6 +442,30 @@ class Database:
         conn.commit()
         conn.close()
 
+    def update_user_language(self, user_id, language):
+        """Update user's UI language without touching reading progress."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('UPDATE users SET language = ? WHERE user_id = ?', (language, user_id))
+        conn.commit()
+        conn.close()
+
+    def update_user_translation(self, user_id, translation):
+        """Update user's Bible translation without touching reading progress."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('UPDATE users SET translation = ? WHERE user_id = ?', (translation, user_id))
+        conn.commit()
+        conn.close()
+
+    def update_user_plan(self, user_id, plan_name):
+        """Update user's reading plan key while preserving current day/streak."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('UPDATE users SET plan_name = ? WHERE user_id = ?', (plan_name, user_id))
+        conn.commit()
+        conn.close()
+
     def get_notification_times(self, user_id):
         """Get notification times for a user"""
         conn = self.get_connection()

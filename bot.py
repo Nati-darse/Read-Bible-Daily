@@ -132,6 +132,14 @@ async def language_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = 'am' if ('amharic' in choice.lower()) else 'en'
     context.user_data['language'] = lang
 
+    if context.user_data.get('settings_action') == 'set_lang':
+        user_id = update.effective_user.id
+        db.update_user_language(user_id, lang)
+        context.user_data.pop('settings_action', None)
+        msg = 'Language updated.'
+        await update.message.reply_text(msg, reply_markup=Menu.get_main_menu(lang))
+        return ConversationHandler.END
+
     await update.message.reply_text(
         MESSAGES['welcome'][lang].format(name=update.effective_user.first_name),
         reply_markup=Menu.get_plan_menu(lang),
@@ -150,6 +158,16 @@ async def plan_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
             break
 
     context.user_data['plan'] = plan_key
+
+    if context.user_data.get('settings_action') == 'set_plan':
+        user_id = update.effective_user.id
+        db.update_user_plan(user_id, plan_key)
+        context.user_data.pop('settings_action', None)
+        await update.message.reply_text(
+            'Plan updated. Your progress day was kept.',
+            reply_markup=Menu.get_main_menu(lang),
+        )
+        return ConversationHandler.END
 
     await update.message.reply_text(
         MESSAGES['choose_translation'][lang],
@@ -171,6 +189,16 @@ async def translation_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     context.user_data['translation'] = translation
     lang = context.user_data.get('language', 'en')
+
+    if context.user_data.get('settings_action') == 'set_trans':
+        user_id = update.effective_user.id
+        db.update_user_translation(user_id, translation)
+        context.user_data.pop('settings_action', None)
+        await update.message.reply_text(
+            'Translation updated.',
+            reply_markup=Menu.get_main_menu(lang),
+        )
+        return ConversationHandler.END
 
     await update.message.reply_text(
         MESSAGES['choose_times_1'][lang],
@@ -211,6 +239,7 @@ async def times_chosen_callback(update: Update, context: ContextTypes.DEFAULT_TY
     user = update.effective_user
     lang = context.user_data.get('language', 'en')
     times_str = ','.join(user_times)
+    is_settings_times = context.user_data.get('settings_action') == 'set_times'
 
     existing = db.get_user(user.id)
     if existing:
@@ -226,17 +255,27 @@ async def times_chosen_callback(update: Update, context: ContextTypes.DEFAULT_TY
         )
         db.update_notification_times(user.id, times_str)
 
-    plan_name = READING_PLANS[context.user_data['plan']]['name'][lang]
-    trans_name = BIBLE_TRANSLATIONS.get(context.user_data['translation'], context.user_data['translation'])
+    user_after = db.get_user(user.id)
+    if not user_after:
+        await query.message.reply_text('Could not load updated settings right now.')
+        return ConversationHandler.END
+
+    plan_name = READING_PLANS[user_after['plan_name']]['name'][user_after['language']]
+    trans_name = BIBLE_TRANSLATIONS.get(user_after['translation'], user_after['translation'])
 
     await query.message.reply_text(
-        MESSAGES['registration_complete'][lang].format(plan=plan_name, translation=trans_name),
-        reply_markup=Menu.get_main_menu(lang),
+        (
+            f'Notification times updated.\n\nPlan: {plan_name}\nTranslation: {trans_name}'
+            if is_settings_times else
+            MESSAGES['registration_complete'][user_after['language']].format(plan=plan_name, translation=trans_name)
+        ),
+        reply_markup=Menu.get_main_menu(user_after['language']),
     )
 
-    user_data = db.get_user(user.id)
-    if user_data:
-        await show_todays_reading(update, context, user_data)
+    context.user_data.pop('settings_action', None)
+
+    if not is_settings_times and user_after:
+        await show_todays_reading(update, context, user_after)
 
     return ConversationHandler.END
 
@@ -466,12 +505,14 @@ async def settings_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['plan'] = user_data.get('plan_name', 'bible_in_one_year')
 
     if data == 'set_lang':
+        context.user_data['settings_action'] = 'set_lang'
         keyboard = [["English", "Amharic"]]
         reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
         await query.message.reply_text(MESSAGES['choose_language'][lang], reply_markup=reply_markup)
         return CHOOSING_LANGUAGE
 
     if data == 'set_plan':
+        context.user_data['settings_action'] = 'set_plan'
         await query.message.reply_text(
             MESSAGES['welcome'][lang].format(name=update.effective_user.first_name),
             reply_markup=Menu.get_plan_menu(lang),
@@ -479,6 +520,7 @@ async def settings_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return CHOOSING_PLAN
 
     if data == 'set_trans':
+        context.user_data['settings_action'] = 'set_trans'
         if 'plan' not in context.user_data:
             context.user_data['plan'] = 'bible_in_one_year'
         await query.message.reply_text(
@@ -488,6 +530,7 @@ async def settings_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return CHOOSING_TRANSLATION
 
     if data == 'set_times':
+        context.user_data['settings_action'] = 'set_times'
         context.user_data['notification_times'] = []
         await query.message.reply_text(
             MESSAGES['choose_times_1'][lang],
@@ -552,18 +595,14 @@ async def check_notifications(context: ContextTypes.DEFAULT_TYPE):
             if not full_user:
                 continue
 
-            # Resend same day's prepared word if it already exists, so users
-            # reliably receive both scheduled reminders for the day.
             todays = db.get_todays_passages(full_user['user_id'])
             if todays:
-                await _send_daily_reading_messages(
-                    context,
-                    chat_id=full_user['user_id'],
-                    user_data=full_user,
-                    include_header=True,
-                    forced_plan_day=todays['plan_day'],
-                    forced_passages=todays['passages'],
-                )
+                summary = db.get_day_completion_summary(full_user['user_id'], todays['plan_day'])
+                if summary['completed'] < summary['total']:
+                    msg = (
+                        f"Reminder: today's reading is waiting.\nCompleted: {summary['completed']}/{summary['total']}"
+                    )
+                    await context.bot.send_message(chat_id=full_user['user_id'], text=msg)
                 continue
 
             await _send_daily_reading_messages(
