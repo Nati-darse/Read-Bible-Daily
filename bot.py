@@ -113,6 +113,9 @@ async def _send_daily_reading_messages(
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    # Keep /start idempotent: clear transient settings/onboarding flags.
+    context.user_data.pop('settings_action', None)
+    context.user_data.pop('notification_times', None)
     existing_user = db.get_user(user.id)
 
     if existing_user:
@@ -714,7 +717,6 @@ def main():
         entry_points=[
             CommandHandler('start', start),
             CallbackQueryHandler(settings_entry, pattern='^set_'),
-            MessageHandler(filters.Regex(r'^(English|Amharic|.*\(Amharic\))$'), language_chosen),
         ],
         states={
             CHOOSING_LANGUAGE: [
@@ -735,6 +737,7 @@ def main():
             ],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
+        allow_reentry=True,
     )
 
     application.add_handler(conv_handler)
@@ -755,10 +758,20 @@ def main():
     port = int(os.getenv('PORT', 8080))
     render_url = (os.getenv('RENDER_EXTERNAL_URL') or '').strip()
     webhook_base = (os.getenv('WEBHOOK_BASE_URL') or render_url).strip()
-    use_webhook = (
-        (os.getenv('USE_WEBHOOK', 'true' if webhook_base else 'false').lower() == 'true')
-        and bool(webhook_base)
-    )
+    is_render = bool(os.getenv('RENDER') or os.getenv('RENDER_SERVICE_ID') or render_url)
+
+    if is_render:
+        use_webhook = bool(webhook_base)
+        if not use_webhook:
+            logger.warning(
+                'Render environment detected but no webhook base URL found. '
+                'Falling back to polling may cause 409 conflicts.'
+            )
+    else:
+        use_webhook = (
+            (os.getenv('USE_WEBHOOK', 'true' if webhook_base else 'false').lower() == 'true')
+            and bool(webhook_base)
+        )
 
     if use_webhook:
         enable_webhook_health_routes()
