@@ -758,20 +758,10 @@ def main():
     port = int(os.getenv('PORT', 8080))
     render_url = (os.getenv('RENDER_EXTERNAL_URL') or '').strip()
     webhook_base = (os.getenv('WEBHOOK_BASE_URL') or render_url).strip()
-    is_render = bool(os.getenv('RENDER') or os.getenv('RENDER_SERVICE_ID') or render_url)
-
-    if is_render:
-        use_webhook = bool(webhook_base)
-        if not use_webhook:
-            logger.warning(
-                'Render environment detected but no webhook base URL found. '
-                'Falling back to polling may cause 409 conflicts.'
-            )
-    else:
-        use_webhook = (
-            (os.getenv('USE_WEBHOOK', 'true' if webhook_base else 'false').lower() == 'true')
-            and bool(webhook_base)
-        )
+    use_webhook = (
+        (os.getenv('USE_WEBHOOK', 'false').lower() == 'true')
+        and bool(webhook_base)
+    )
 
     if use_webhook:
         enable_webhook_health_routes()
@@ -786,6 +776,10 @@ def main():
             drop_pending_updates=True,
         )
     else:
+        logger.info(
+            'Starting in polling mode with dummy HTTP health server. '
+            'Set USE_WEBHOOK=true to enable webhook mode.'
+        )
         print('Bible Bot is running in polling mode...')
         threading.Thread(target=start_dummy_server, daemon=True).start()
         application.run_polling(drop_pending_updates=True)
