@@ -600,12 +600,15 @@ async def check_notifications(context: ContextTypes.DEFAULT_TYPE):
 
             todays = db.get_todays_passages(full_user['user_id'])
             if todays:
-                summary = db.get_day_completion_summary(full_user['user_id'], todays['plan_day'])
-                if summary['completed'] < summary['total']:
-                    msg = (
-                        f"Reminder: today's reading is waiting.\nCompleted: {summary['completed']}/{summary['total']}"
-                    )
-                    await context.bot.send_message(chat_id=full_user['user_id'], text=msg)
+                # Always resend the same day's word at each scheduled time.
+                await _send_daily_reading_messages(
+                    context,
+                    chat_id=full_user['user_id'],
+                    user_data=full_user,
+                    include_header=True,
+                    forced_plan_day=todays['plan_day'],
+                    forced_passages=todays['passages'],
+                )
                 continue
 
             await _send_daily_reading_messages(
