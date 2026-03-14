@@ -629,6 +629,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def post_init(application: Application):
     """Ensure polling mode is cleanly initialized on Telegram side."""
+    use_webhook = os.getenv('USE_WEBHOOK', 'false').lower() == 'true'
+    if use_webhook:
+        return
     try:
         await application.bot.delete_webhook(drop_pending_updates=True)
         logger.info('Webhook cleared and pending updates dropped before polling start.')
@@ -779,6 +782,11 @@ def main():
             drop_pending_updates=True,
         )
     else:
+        allow_polling = os.getenv('ALLOW_POLLING', 'false').lower() == 'true'
+        if not allow_polling:
+            raise RuntimeError(
+                'Polling is disabled. Set USE_WEBHOOK=true or ALLOW_POLLING=true to run.'
+            )
         logger.info(
             'Starting in polling mode with dummy HTTP health server. '
             'Set USE_WEBHOOK=true to enable webhook mode.'
