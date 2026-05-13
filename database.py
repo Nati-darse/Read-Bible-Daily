@@ -17,7 +17,9 @@ class Database:
         self.init_database()
     
     def get_connection(self):
-        return sqlite3.connect(self.db_name)
+        conn = sqlite3.connect(self.db_name)
+        conn.row_factory = sqlite3.Row
+        return conn
     
     def init_database(self):
         """Initialize database tables"""
@@ -43,6 +45,12 @@ class Database:
             )
 
         ''')
+
+        self._ensure_column(cursor, 'users', 'language', "TEXT DEFAULT 'en'")
+        self._ensure_column(cursor, 'users', 'streak', 'INTEGER DEFAULT 0')
+        self._ensure_column(cursor, 'users', 'max_streak', 'INTEGER DEFAULT 0')
+        self._ensure_column(cursor, 'users', 'last_read_date', 'TEXT')
+        self._ensure_column(cursor, 'users', 'notification_times', 'TEXT')
         
         # User progress table
         cursor.execute('''
@@ -100,6 +108,15 @@ class Database:
         conn.commit()
         conn.close()
         print("Database initialized successfully!")
+
+    def _ensure_column(self, cursor, table_name, column_name, column_definition):
+        """Add a missing column when upgrading an existing SQLite database."""
+        cursor.execute(f'PRAGMA table_info({table_name})')
+        columns = {column[1] for column in cursor.fetchall()}
+        if column_name not in columns:
+            cursor.execute(
+                f'ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}'
+            )
     
     def add_user(self, user_id, username, first_name, plan_name, translation='ESV', language='en'):
         """Add a new user to the database"""
@@ -130,20 +147,19 @@ class Database:
         conn.close()
         
         if user_row:
-            # Match columns with the table structure
             return {
-                'user_id': user_row[0],
-                'username': user_row[1],
-                'first_name': user_row[2],
-                'plan_name': user_row[3],
-                'language': user_row[4],
-                'translation': user_row[5],
-                'start_date': user_row[6],
-                'current_day': user_row[7],
-                'streak': user_row[8],
-                'max_streak': user_row[9],
-                'last_read_date': user_row[10],
-                'notification_times': user_row[11]
+                'user_id': user_row['user_id'],
+                'username': user_row['username'],
+                'first_name': user_row['first_name'],
+                'plan_name': user_row['plan_name'],
+                'language': user_row['language'] or 'en',
+                'translation': user_row['translation'] or 'ESV',
+                'start_date': user_row['start_date'],
+                'current_day': user_row['current_day'] or 1,
+                'streak': user_row['streak'] or 0,
+                'max_streak': user_row['max_streak'] or 0,
+                'last_read_date': user_row['last_read_date'],
+                'notification_times': user_row['notification_times']
             }
         return None
 
