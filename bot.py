@@ -304,6 +304,10 @@ async def handle_menu_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_profile(update, context, user_data)
     elif text.startswith("📊") or "progress" in text_l:
         await show_progress(update, context, user_data)
+    elif "favorite" in text_l:
+        await favorites_command(update, context)
+    elif "history" in text_l:
+        await history_command(update, context)
     elif text.startswith("⚙️") or "settings" in text_l:
         await update.message.reply_text(
             "Settings",
