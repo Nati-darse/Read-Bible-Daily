@@ -365,6 +365,19 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def restart_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ask for confirmation before restarting reading progress."""
+    user_data = db.get_user(update.effective_user.id)
+    if not user_data:
+        await start(update, context)
+        return
+
+    await update.message.reply_text(
+        'Are you sure you want to restart your plan from Day 1? This cannot be undone.',
+        reply_markup=Menu.get_yes_no_menu(user_data['language'], 'restart'),
+    )
+
+
 async def show_todays_reading(update: Update, context: ContextTypes.DEFAULT_TYPE, user_data):
     user_id = user_data['user_id']
     lang = user_data['language']
@@ -940,6 +953,7 @@ def main():
     application.add_handler(CommandHandler('profile', profile_command))
     application.add_handler(CommandHandler('progress', progress_command))
     application.add_handler(CommandHandler('settings', settings_command))
+    application.add_handler(CommandHandler('restart', restart_command))
     application.add_handler(CommandHandler('reset', reset_user))
     application.add_handler(CommandHandler('favorites', favorites_command))
     application.add_handler(CommandHandler('history', history_command))
