@@ -327,6 +327,47 @@ class Database:
         conn.close()
         return rows
 
+    def get_user_stats(self, user_id):
+        """Get summary stats for profile and progress screens."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            'SELECT COUNT(*) FROM user_progress WHERE user_id = ? AND completed = TRUE',
+            (user_id,)
+        )
+        completed_days = cursor.fetchone()[0] or 0
+
+        cursor.execute(
+            'SELECT COUNT(*) FROM favorites WHERE user_id = ?',
+            (user_id,)
+        )
+        favorites_count = cursor.fetchone()[0] or 0
+
+        cursor.execute(
+            'SELECT COUNT(*) FROM achievements WHERE user_id = ?',
+            (user_id,)
+        )
+        achievements_count = cursor.fetchone()[0] or 0
+
+        cursor.execute('''
+            SELECT book, COUNT(*) AS read_count
+            FROM user_progress
+            WHERE user_id = ? AND completed = TRUE
+            GROUP BY book
+            ORDER BY read_count DESC, book ASC
+            LIMIT 1
+        ''', (user_id,))
+        favorite_book_row = cursor.fetchone()
+
+        conn.close()
+        return {
+            'completed_days': completed_days,
+            'favorites_count': favorites_count,
+            'achievements_count': achievements_count,
+            'most_read_book': favorite_book_row['book'] if favorite_book_row else 'None'
+        }
+
     def upsert_daily_chapter(self, user_id, plan_day, book, chapter):
         """Ensure a daily chapter status row exists for today's plan day."""
         today = datetime.now(ET_TZ).strftime('%Y-%m-%d')

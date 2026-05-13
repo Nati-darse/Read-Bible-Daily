@@ -361,6 +361,7 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE, user_
     user_id = user_data['user_id']
 
     achievements = db.get_achievements(user_id)
+    stats = db.get_user_stats(user_id)
     ach_list = ''
     if not achievements:
         ach_list = 'No achievements yet.'
@@ -373,7 +374,9 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE, user_
         f"Current Streak: {user_data['streak']} days\n"
         f"Longest Streak: {user_data['max_streak']} days\n"
         f"Plan: {READING_PLANS[user_data['plan_name']]['name'][lang]}\n"
-        f"Translation: {BIBLE_TRANSLATIONS.get(user_data['translation'], user_data['translation'])}\n\n"
+        f"Translation: {BIBLE_TRANSLATIONS.get(user_data['translation'], user_data['translation'])}\n"
+        f"Completed Days: {stats['completed_days']}\n"
+        f"Favorite Readings: {stats['favorites_count']}\n\n"
         f"**Achievements:**\n{ach_list}"
     )
 
@@ -383,7 +386,8 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE, user_
 async def show_progress(update: Update, context: ContextTypes.DEFAULT_TYPE, user_data):
     lang = user_data['language']
     total_days = READING_PLANS[user_data['plan_name']]['total_days']
-    completed_days = max(0, user_data['current_day'] - 1)
+    stats = db.get_user_stats(user_data['user_id'])
+    completed_days = stats['completed_days']
     percentage = (completed_days / total_days) * 100
 
     bars = 15
@@ -393,7 +397,12 @@ async def show_progress(update: Update, context: ContextTypes.DEFAULT_TYPE, user
     text = (
         f"**Reading Progress**\n\n"
         f"Plan: {READING_PLANS[user_data['plan_name']]['name'][lang]}\n"
-        f"Day: {completed_days} of {total_days}\n"
+        f"Completed Days: {completed_days} of {total_days}\n"
+        f"Next Reading Day: {min(user_data['current_day'], total_days)} of {total_days}\n"
+        f"Current Streak: {user_data['streak']} days\n"
+        f"Longest Streak: {user_data['max_streak']} days\n"
+        f"Most Read Book: {stats['most_read_book']}\n"
+        f"Achievements: {stats['achievements_count']}\n"
         f"Completion: {percentage:.1f}%\n\n"
         f"{bar}"
     )
