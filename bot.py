@@ -321,8 +321,7 @@ async def handle_menu_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await update.message.reply_text(msg, reply_markup=Menu.get_yes_no_menu(lang, 'restart'))
     elif text.startswith("📤") or "share bot" in text_l:
-        bot_link = f'https://t.me/{context.bot.username}'
-        await update.message.reply_text(bot_link)
+        await share_command(update, context)
     elif text.startswith("❓") or "help" in text_l:
         await update.message.reply_text(Menu.get_help_text(lang), parse_mode='Markdown')
 
@@ -500,6 +499,21 @@ async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYP
         "\n".join(lines),
         parse_mode='Markdown',
         reply_markup=Menu.get_main_menu(user_data['language']),
+    )
+
+
+async def share_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Share the bot invite text."""
+    user_data = db.get_user(update.effective_user.id)
+    bot_link = f'https://t.me/{context.bot.username}'
+    message = (
+        "Read the Bible daily with me using Daily Bible Reader.\n\n"
+        f"Start here: {bot_link}"
+    )
+
+    await update.message.reply_text(
+        message,
+        reply_markup=Menu.get_main_menu(user_data['language']) if user_data else None,
     )
 
 
@@ -887,6 +901,7 @@ def main():
     application.add_handler(CommandHandler('favorites', favorites_command))
     application.add_handler(CommandHandler('history', history_command))
     application.add_handler(CommandHandler('achievements', achievements_command))
+    application.add_handler(CommandHandler('share', share_command))
     application.add_error_handler(error_handler)
 
     port = int(os.getenv('PORT', 8080))
