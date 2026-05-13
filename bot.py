@@ -81,6 +81,7 @@ async def _send_daily_reading_messages(
         await context.bot.send_message(chat_id=chat_id, text=header)
 
     share_label = 'Share'
+    favorite_label = 'Favorite'
     mark_label = 'Mark Read'
     done_label = 'Marked'
 
@@ -98,6 +99,7 @@ async def _send_daily_reading_messages(
 
             keyboard = [[
                 InlineKeyboardButton(share_label, callback_data=f'share_{book}_{chapter}'),
+                InlineKeyboardButton(favorite_label, callback_data=f'fav_{book}_{chapter}'),
                 InlineKeyboardButton(chapter_btn, callback_data=f'done_{chapter_id}'),
             ]]
 
@@ -399,6 +401,39 @@ async def show_progress(update: Update, context: ContextTypes.DEFAULT_TYPE, user
     await update.message.reply_text(text, parse_mode='Markdown')
 
 
+async def favorites_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show saved favorite chapter readings."""
+    user_id = update.effective_user.id
+    user_data = db.get_user(user_id)
+
+    if not user_data:
+        await start(update, context)
+        return
+
+    favorites = db.get_favorites(user_id)
+    if not favorites:
+        await update.message.reply_text(
+            "No favorites saved yet. Use the Favorite button under a reading to save one.",
+            reply_markup=Menu.get_main_menu(user_data['language']),
+        )
+        return
+
+    lines = ["**Favorite Readings**\n"]
+    for index, favorite in enumerate(favorites[:10], 1):
+        book, chapter, verse, text = favorite
+        reference = f"{book} {chapter}" if not verse else f"{book} {chapter}:{verse}"
+        preview = (text or '').replace('\n', ' ')
+        if len(preview) > 120:
+            preview = preview[:117] + '...'
+        lines.append(f"{index}. **{reference}**\n{preview}")
+
+    await update.message.reply_text(
+        "\n\n".join(lines),
+        parse_mode='Markdown',
+        reply_markup=Menu.get_main_menu(user_data['language']),
+    )
+
+
 async def check_achievements(update, context, user_id, streak, total_reads, lang):
     awards = []
 
@@ -440,10 +475,12 @@ async def handle_chapter_done_callback(update: Update, context: ContextTypes.DEF
         return
 
     share_label = 'Share'
+    favorite_label = 'Favorite'
     done_label = 'Marked'
 
     keyboard = [[
         InlineKeyboardButton(share_label, callback_data=f"share_{chapter_data['book']}_{chapter_data['chapter']}"),
+        InlineKeyboardButton(favorite_label, callback_data=f"fav_{chapter_data['book']}_{chapter_data['chapter']}"),
         InlineKeyboardButton(done_label, callback_data=f'done_{chapter_id}'),
     ]]
     try:
@@ -561,6 +598,24 @@ async def handle_share_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.message.reply_text(share_message[:4000])
     except Exception as e:
         logger.error('Share callback error: %s', e)
+
+
+async def handle_favorite_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    try:
+        _, book, chapter = query.data.split('_', 2)
+        user_id = update.effective_user.id
+        user = db.get_user(user_id)
+        translation = user['translation'] if user else 'ESV'
+        chapter_text = bible_api.get_text(book, chapter, translation)
+
+        db.add_favorite(user_id, book, int(chapter), 0, chapter_text)
+        await query.message.reply_text(f"Saved favorite: {book} {chapter}")
+    except Exception as e:
+        logger.error('Favorite callback error: %s', e)
+        await query.message.reply_text("Sorry, I couldn't save that favorite.")
 
 
 async def handle_restart_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -750,6 +805,7 @@ def main():
     # Redundant global route so settings callbacks still work if conversation state is lost.
     application.add_handler(CallbackQueryHandler(settings_entry, pattern='^set_'))
     application.add_handler(CallbackQueryHandler(handle_share_callback, pattern='^share_'))
+    application.add_handler(CallbackQueryHandler(handle_favorite_callback, pattern='^fav_'))
     application.add_handler(CallbackQueryHandler(handle_chapter_done_callback, pattern='^done_'))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu_click))
     application.add_handler(CallbackQueryHandler(handle_restart_callback, pattern='^restart_'))
@@ -759,6 +815,7 @@ def main():
 
     application.add_handler(CommandHandler('help', help_command))
     application.add_handler(CommandHandler('reset', reset_user))
+    application.add_handler(CommandHandler('favorites', favorites_command))
     application.add_error_handler(error_handler)
 
     port = int(os.getenv('PORT', 8080))
