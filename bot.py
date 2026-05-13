@@ -326,6 +326,45 @@ async def handle_menu_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(Menu.get_help_text(lang), parse_mode='Markdown')
 
 
+async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show today's reading from a slash command."""
+    user_data = db.get_user(update.effective_user.id)
+    if not user_data:
+        await start(update, context)
+        return
+    await show_todays_reading(update, context, user_data)
+
+
+async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show profile from a slash command."""
+    user_data = db.get_user(update.effective_user.id)
+    if not user_data:
+        await start(update, context)
+        return
+    await show_profile(update, context, user_data)
+
+
+async def progress_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show progress from a slash command."""
+    user_data = db.get_user(update.effective_user.id)
+    if not user_data:
+        await start(update, context)
+        return
+    await show_progress(update, context, user_data)
+
+
+async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show settings from a slash command."""
+    user_data = db.get_user(update.effective_user.id)
+    if not user_data:
+        await start(update, context)
+        return
+    await update.message.reply_text(
+        "Settings",
+        reply_markup=Menu.get_settings_menu(user_data['language']),
+    )
+
+
 async def show_todays_reading(update: Update, context: ContextTypes.DEFAULT_TYPE, user_data):
     user_id = user_data['user_id']
     lang = user_data['language']
@@ -897,6 +936,10 @@ def main():
     job_queue.run_repeating(check_notifications, interval=3600, first=10)
 
     application.add_handler(CommandHandler('help', help_command))
+    application.add_handler(CommandHandler('today', today_command))
+    application.add_handler(CommandHandler('profile', profile_command))
+    application.add_handler(CommandHandler('progress', progress_command))
+    application.add_handler(CommandHandler('settings', settings_command))
     application.add_handler(CommandHandler('reset', reset_user))
     application.add_handler(CommandHandler('favorites', favorites_command))
     application.add_handler(CommandHandler('history', history_command))
