@@ -312,6 +312,21 @@ class Database:
         conn.close()
         return result is not None
 
+    def get_reading_history(self, user_id, limit=10):
+        """Get recently completed reading days for a user."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT date, book, chapter
+            FROM user_progress
+            WHERE user_id = ? AND completed = TRUE
+            ORDER BY date DESC
+            LIMIT ?
+        ''', (user_id, limit))
+        rows = cursor.fetchall()
+        conn.close()
+        return rows
+
     def upsert_daily_chapter(self, user_id, plan_day, book, chapter):
         """Ensure a daily chapter status row exists for today's plan day."""
         today = datetime.now(ET_TZ).strftime('%Y-%m-%d')

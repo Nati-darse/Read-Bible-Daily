@@ -434,6 +434,34 @@ async def favorites_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show recent completed reading days."""
+    user_id = update.effective_user.id
+    user_data = db.get_user(user_id)
+
+    if not user_data:
+        await start(update, context)
+        return
+
+    history = db.get_reading_history(user_id)
+    if not history:
+        await update.message.reply_text(
+            "No completed readings yet. Use Today's Reading and mark the chapters read.",
+            reply_markup=Menu.get_main_menu(user_data['language']),
+        )
+        return
+
+    lines = ["**Reading History**\n"]
+    for index, row in enumerate(history, 1):
+        lines.append(f"{index}. {row['date']} - {row['book']} {row['chapter']}")
+
+    await update.message.reply_text(
+        "\n".join(lines),
+        parse_mode='Markdown',
+        reply_markup=Menu.get_main_menu(user_data['language']),
+    )
+
+
 async def check_achievements(update, context, user_id, streak, total_reads, lang):
     awards = []
 
@@ -816,6 +844,7 @@ def main():
     application.add_handler(CommandHandler('help', help_command))
     application.add_handler(CommandHandler('reset', reset_user))
     application.add_handler(CommandHandler('favorites', favorites_command))
+    application.add_handler(CommandHandler('history', history_command))
     application.add_error_handler(error_handler)
 
     port = int(os.getenv('PORT', 8080))
